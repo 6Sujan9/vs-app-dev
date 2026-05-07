@@ -1,0 +1,36 @@
+{
+  "name": "fitness-nutrition-coach-mobile",
+  "version": "1.0.0",
+  "description": "Mobile app for fitness and nutrition coaching using React Native and Expo",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "eject": "expo eject"
+  },
+  "dependencies": {
+    "@react-navigation/bottom-tabs": "^6.5.8",
+    "@react-navigation/native": "^6.1.8",
+    "@react-navigation/stack": "^6.3.17",
+    "axios": "^1.6.0",
+    "expo": "^49.0.23",
+    "expo-barcode-scanner": "~12.5.3",
+    "expo-constants": "^55.0.15",
+    "expo-permissions": "~14.4.0",
+    "expo-status-bar": "~1.11.1",
+    "react": "18.2.0",
+    "react-native": "^0.85.2",
+    "react-native-gesture-handler": "~2.14.0",
+    "react-native-reanimated": "~3.6.0",
+    "react-native-safe-area-context": "4.8.2",
+    "react-native-screens": "~3.29.0",
+    "react-native-webview": "^13.8.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.2.0"
+  },
+  "private": true
+}

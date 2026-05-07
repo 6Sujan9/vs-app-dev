@@ -1,0 +1,507 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AI Fitness & Nutrition Coach - Complete AWS Infrastructure",
+  
+  "Parameters": {
+    "EnvironmentName": {
+      "Type": "String",
+      "Default": "production",
+      "AllowedValues": ["dev", "staging", "production"]
+    },
+    "EC2InstanceType": {
+      "Type": "String",
+      "Default": "t3.medium",
+      "AllowedValues": ["t3.micro", "t3.small", "t3.medium", "t3.large"]
+    },
+    "DatabaseName": {
+      "Type": "String",
+      "Default": "fitness_coach",
+      "MinLength": 5,
+      "MaxLength": 63
+    },
+    "DatabaseUsername": {
+      "Type": "String",
+      "Default": "admin",
+      "MinLength": 5
+    },
+    "DatabasePassword": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 15
+    },
+    "BedrockKnowledgeBaseId": {
+      "Type": "String",
+      "Description": "Bedrock Knowledge Base ID for RAG retrieval"
+    },
+    "S3BucketName": {
+      "Type": "String",
+      "Description": "S3 bucket for knowledge base documents"
+    },
+    "JWTSecretKey": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 32
+    }
+  },
+
+  "Metadata": {
+    "AWS::CloudFormation::Interface": {
+      "ParameterGroups": [
+        {
+          "Label": {"default": "Environment Configuration"},
+          "Parameters": ["EnvironmentName"]
+        },
+        {
+          "Label": {"default": "Compute Configuration"},
+          "Parameters": ["EC2InstanceType"]
+        },
+        {
+          "Label": {"default": "Database Configuration"},
+          "Parameters": ["DatabaseName", "DatabaseUsername", "DatabasePassword"]
+        },
+        {
+          "Label": {"default": "AI Configuration"},
+          "Parameters": ["BedrockKnowledgeBaseId", "S3BucketName"]
+        },
+        {
+          "Label": {"default": "Security Configuration"},
+          "Parameters": ["JWTSecretKey"]
+        }
+      ]
+    }
+  },
+
+  "Resources": {
+    "FitnessCouchVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.0.0.0/16",
+        "EnableDnsHostnames": true,
+        "EnableDnsSupport": true,
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-vpc"},
+          {"Key": "Environment", "Value": {"Ref": "EnvironmentName"}}
+        ]
+      }
+    },
+
+    "PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "CidrBlock": "10.0.1.0/24",
+        "AvailabilityZone": {"Fn::Select": [0, {"Fn::GetAZs": ""}]},
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-public-subnet"}
+        ]
+      }
+    },
+
+    "PrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "CidrBlock": "10.0.2.0/24",
+        "AvailabilityZone": {"Fn::Select": [1, {"Fn::GetAZs": ""}]},
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-private-subnet"}
+        ]
+      }
+    },
+
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-igw"}
+        ]
+      }
+    },
+
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "InternetGatewayId": {"Ref": "InternetGateway"}
+      }
+    },
+
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-public-rt"}
+        ]
+      }
+    },
+
+    "PublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "AttachGateway",
+      "Properties": {
+        "RouteTableId": {"Ref": "PublicRouteTable"},
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {"Ref": "InternetGateway"}
+      }
+    },
+
+    "SubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {"Ref": "PublicSubnet"},
+        "RouteTableId": {"Ref": "PublicRouteTable"}
+      }
+    },
+
+    "ALBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for ALB",
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-alb-sg"}
+        ]
+      }
+    },
+
+    "EC2SecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for EC2 backend",
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 8000,
+            "ToPort": 8000,
+            "SourceSecurityGroupId": {"Ref": "ALBSecurityGroup"}
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-ec2-sg"}
+        ]
+      }
+    },
+
+    "RDSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group for RDS database",
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 5432,
+            "ToPort": 5432,
+            "SourceSecurityGroupId": {"Ref": "EC2SecurityGroup"}
+          }
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-rds-sg"}
+        ]
+      }
+    },
+
+    "DBSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "Subnet group for RDS",
+        "SubnetIds": [
+          {"Ref": "PublicSubnet"},
+          {"Ref": "PrivateSubnet"}
+        ],
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-db-subnet-group"}
+        ]
+      }
+    },
+
+    "RDSInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "DeletionPolicy": "Snapshot",
+      "Properties": {
+        "DBInstanceIdentifier": "fitness-coach-db",
+        "DBInstanceClass": "db.t3.micro",
+        "Engine": "postgres",
+        "EngineVersion": "14.7",
+        "MasterUsername": {"Ref": "DatabaseUsername"},
+        "MasterUserPassword": {"Ref": "DatabasePassword"},
+        "AllocatedStorage": 20,
+        "StorageType": "gp3",
+        "StorageEncrypted": true,
+        "DBName": {"Ref": "DatabaseName"},
+        "DBSubnetGroupName": {"Ref": "DBSubnetGroup"},
+        "VPCSecurityGroups": [{"Ref": "RDSSecurityGroup"}],
+        "MultiAZ": true,
+        "BackupRetentionPeriod": 7,
+        "PreferredBackupWindow": "03:00-04:00",
+        "PreferredMaintenanceWindow": "mon:04:00-mon:05:00",
+        "EnableCloudwatchLogsExports": ["postgresql"],
+        "EnableIAMDatabaseAuthentication": true,
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-database"}
+        ]
+      }
+    },
+
+    "EC2Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "BedrockAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                    "bedrock-agent-runtime:RetrieveAndGenerate",
+                    "bedrock-agent-runtime:Retrieve"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "S3Access",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    {"Fn::Sub": "arn:aws:s3:::${S3BucketName}"},
+                    {"Fn::Sub": "arn:aws:s3:::${S3BucketName}/*"}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "SecretsManagerAccess",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:GetSecretValue"
+                  ],
+                  "Resource": {"Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fitness-coach/*"}
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+
+    "EC2InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [{"Ref": "EC2Role"}]
+      }
+    },
+
+    "ApplicationLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Name": "fitness-coach-alb",
+        "Subnets": [
+          {"Ref": "PublicSubnet"},
+          {"Ref": "PrivateSubnet"}
+        ],
+        "SecurityGroups": [{"Ref": "ALBSecurityGroup"}],
+        "Type": "application",
+        "Scheme": "internet-facing",
+        "IpAddressType": "ipv4",
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-alb"}
+        ]
+      }
+    },
+
+    "TargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Name": "fitness-coach-tg",
+        "Port": 8000,
+        "Protocol": "HTTP",
+        "VpcId": {"Ref": "FitnessCouchVPC"},
+        "HealthCheckEnabled": true,
+        "HealthCheckPath": "/health",
+        "HealthCheckProtocol": "HTTP",
+        "HealthCheckIntervalSeconds": 30,
+        "HealthCheckTimeoutSeconds": 5,
+        "HealthyThresholdCount": 2,
+        "UnhealthyThresholdCount": 3,
+        "TargetType": "instance",
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-tg"}
+        ]
+      }
+    },
+
+    "ALBListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "LoadBalancerArn": {"Ref": "ApplicationLoadBalancer"},
+        "Port": 80,
+        "Protocol": "HTTP",
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {"Ref": "TargetGroup"}
+          }
+        ]
+      }
+    },
+
+    "EC2Instance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-0c55b159cbfafe1f0",
+        "InstanceType": {"Ref": "EC2InstanceType"},
+        "SubnetId": {"Ref": "PrivateSubnet"},
+        "SecurityGroupIds": [{"Ref": "EC2SecurityGroup"}],
+        "IamInstanceProfile": {"Ref": "EC2InstanceProfile"},
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Sub": "#!/bin/bash\nset -e\napt-get update\napt-get upgrade -y\napt-get install -y docker.io docker-compose awscli\nsystemctl start docker\nsystemctl enable docker\nmkdir -p /opt/fitness-coach\ncd /opt/fitness-coach\n# Clone or pull application code\n# git clone <repo> .\ncat > .env << 'ENVEOF'\nDATABASE_URL=postgresql://${DatabaseUsername}:${DatabasePassword}@${RDSInstance.Endpoint.Address}:5432/${DatabaseName}\nBEDROCK_REGION=us-east-1\nBEDROCK_MODEL=claude-3-sonnet-20240229-v1:0\nKNOWLEDGE_BASE_ID=${BedrockKnowledgeBaseId}\nS3_BUCKET=${S3BucketName}\nJWT_SECRET_KEY=${JWTSecretKey}\nENVIRONMENT=production\nENVEOF\n"
+          }
+        },
+        "Tags": [
+          {"Key": "Name", "Value": "fitness-coach-backend"}
+        ]
+      }
+    },
+
+    "TargetGroupAttachment": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroupAttachment",
+      "Properties": {
+        "TargetGroupArn": {"Ref": "TargetGroup"},
+        "TargetId": {"Ref": "EC2Instance"},
+        "Port": 8000
+      }
+    },
+
+    "CloudWatchLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "/aws/fitness-coach",
+        "RetentionInDays": 30
+      }
+    },
+
+    "HighCPUAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "fitness-coach-high-cpu",
+        "AlarmDescription": "Alert when EC2 CPU > 80%",
+        "MetricName": "CPUUtilization",
+        "Namespace": "AWS/EC2",
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {"Ref": "EC2Instance"}
+          }
+        ]
+      }
+    },
+
+    "HighDatabaseConnectionsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "fitness-coach-high-db-connections",
+        "AlarmDescription": "Alert when DB connections > 80",
+        "MetricName": "DatabaseConnections",
+        "Namespace": "AWS/RDS",
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": "fitness-coach-db"
+          }
+        ]
+      }
+    }
+  },
+
+  "Outputs": {
+    "VPCId": {
+      "Description": "VPC ID",
+      "Value": {"Ref": "FitnessCouchVPC"},
+      "Export": {"Name": "fitness-coach-vpc"}
+    },
+    "DatabaseEndpoint": {
+      "Description": "RDS Database Endpoint",
+      "Value": {"Fn::GetAtt": ["RDSInstance", "Endpoint.Address"]}
+    },
+    "ALBDNSName": {
+      "Description": "Application Load Balancer DNS Name",
+      "Value": {"Fn::GetAtt": ["ApplicationLoadBalancer", "DNSName"]}
+    },
+    "EC2InstanceId": {
+      "Description": "EC2 Instance ID",
+      "Value": {"Ref": "EC2Instance"}
+    },
+    "CloudWatchLogGroup": {
+      "Description": "CloudWatch Log Group",
+      "Value": {"Ref": "CloudWatchLogGroup"}
+    }
+  }
+}

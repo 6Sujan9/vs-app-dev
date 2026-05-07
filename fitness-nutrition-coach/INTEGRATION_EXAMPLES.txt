@@ -1,0 +1,555 @@
+"""
+API Testing Examples - End-to-End Integration
+Complete working examples of the full request-response cycle
+"""
+
+# ============================================================================
+# 1. REGISTRATION (Setup for testing)
+# ============================================================================
+
+# Request:
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "username": "testuser",
+    "password": "SecurePassword123",
+    "first_name": "John",
+    "last_name": "Doe"
+  }'
+
+# Response (HTTP 200):
+{
+  "id": 42,
+  "email": "test@example.com",
+  "username": "testuser",
+  "first_name": "John",
+  "last_name": "Doe",
+  "is_active": true,
+  "created_at": "2024-01-15T10:00:00Z"
+}
+
+
+# ============================================================================
+# 2. LOGIN (Get JWT token)
+# ============================================================================
+
+# Request:
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "SecurePassword123"
+  }'
+
+# Response (HTTP 200):
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
+
+# Store token:
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+
+# ============================================================================
+# 3. UPDATE USER PROFILE (For context in AI generation)
+# ============================================================================
+
+# Request:
+curl -X PUT http://localhost:8000/api/v1/users/profile \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "age": 28,
+    "weight": 75.5,
+    "height": 180,
+    "gender": "male",
+    "fitness_level": "intermediate",
+    "goals": ["muscle_gain", "strength"],
+    "dietary_restrictions": ["vegetarian"],
+    "medical_conditions": ["asthma"]
+  }'
+
+# Response (HTTP 200):
+{
+  "id": 42,
+  "username": "testuser",
+  "age": 28,
+  "weight": 75.5,
+  "height": 180,
+  "gender": "male",
+  "fitness_level": "intermediate",
+  "goals": ["muscle_gain", "strength"],
+  "dietary_restrictions": ["vegetarian"],
+  "medical_conditions": ["asthma"],
+  "updated_at": "2024-01-15T10:10:00Z"
+}
+
+
+# ============================================================================
+# 4. GENERATE WORKOUT (COMPLETE INTEGRATION FLOW)
+# ============================================================================
+
+# Request - Complete Workflow:
+curl -X POST http://localhost:8000/api/v1/integration/workout/generate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "muscle_gain",
+    "duration_weeks": 12,
+    "frequency": 4,
+    "equipment": ["dumbbell", "barbell", "bench"],
+    "intensity": "high",
+    "specific_requirements": "No leg exercises due to knee pain"
+  }'
+
+# Response (HTTP 200) - After 2-4 seconds:
+{
+  "success": true,
+  "request_id": "a1b2c3d4-e5f6-7g8h-i9j0-k1l2m3n4o5p6",
+  "workout": {
+    "id": 12345,
+    "name": "Progressive Muscle Gain Training Plan",
+    "description": "A comprehensive 12-week hypertrophy-focused program...",
+    "goal": "muscle_gain",
+    "duration_weeks": 12,
+    "frequency": 4,
+    "intensity": "high",
+    "equipment": ["dumbbell", "barbell", "bench"],
+    "exercises": [
+      {
+        "name": "Barbell Bench Press",
+        "sets": 4,
+        "reps": "6-8",
+        "rest_seconds": 180,
+        "weight_percentage": "85%"
+      },
+      {
+        "name": "Barbell Rows",
+        "sets": 4,
+        "reps": "6-8",
+        "rest_seconds": 180,
+        "weight_percentage": "85%"
+      },
+      {
+        "name": "Dumbbell Incline Press",
+        "sets": 3,
+        "reps": "8-10",
+        "rest_seconds": 120,
+        "weight_percentage": "75%"
+      },
+      {
+        "name": "Pull-ups",
+        "sets": 3,
+        "reps": "8-12",
+        "rest_seconds": 120,
+        "modifier": "No leg focus"
+      }
+    ],
+    "ai_model": "claude-3-sonnet",
+    "tokens_used": 1847,
+    "rag_sources": [
+      {
+        "source": "s3://fitness-documents/hypertrophy-training-guide.pdf",
+        "score": 0.95
+      },
+      {
+        "source": "s3://fitness-documents/progressive-overload-principles.pdf",
+        "score": 0.87
+      },
+      {
+        "source": "s3://fitness-documents/periodization-strategies.pdf",
+        "score": 0.82
+      }
+    ],
+    "created_at": "2024-01-15T10:30:45.325Z",
+    "updated_at": "2024-01-15T10:30:45.325Z"
+  },
+  "metadata": {
+    "rag_documents": 3,
+    "tokens_used": 1847,
+    "processing_time_ms": 3847,
+    "status_timeline": {
+      "initiated": {
+        "timestamp": "2024-01-15T10:30:42.100Z",
+        "duration_ms": 0,
+        "metadata": {}
+      },
+      "validating": {
+        "timestamp": "2024-01-15T10:30:42.125Z",
+        "duration_ms": 25,
+        "metadata": {}
+      },
+      "retrieving_context": {
+        "timestamp": "2024-01-15T10:30:42.150Z",
+        "duration_ms": 1050,
+        "metadata": {
+          "source": "knowledge_base",
+          "documents_retrieved": 3
+        }
+      },
+      "calling_ai": {
+        "timestamp": "2024-01-15T10:30:45.150Z",
+        "duration_ms": 3000,
+        "metadata": {
+          "model": "claude-3-sonnet",
+          "tokens_used": 1847,
+          "temperature": 0.7
+        }
+      },
+      "storing_result": {
+        "timestamp": "2024-01-15T10:30:45.300Z",
+        "duration_ms": 150,
+        "metadata": {
+          "table": "workout_plans",
+          "record_id": 12345
+        }
+      },
+      "completed": {
+        "timestamp": "2024-01-15T10:30:45.325Z",
+        "duration_ms": 3225,
+        "metadata": {}
+      }
+    }
+  }
+}
+
+
+# ============================================================================
+# 5. ERROR RESPONSE EXAMPLE - Invalid Token
+# ============================================================================
+
+# Request with bad token:
+curl -X POST http://localhost:8000/api/v1/integration/workout/generate \
+  -H "Authorization: Bearer invalid-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "muscle_gain",
+    "duration_weeks": 12,
+    "frequency": 4,
+    "equipment": ["dumbbell"],
+    "intensity": "high"
+  }'
+
+# Response (HTTP 401):
+{
+  "detail": "Invalid or expired token"
+}
+
+# Frontend handling:
+// Clear localStorage and redirect
+localStorage.removeItem('access_token');
+localStorage.removeItem('refresh_token');
+window.location.href = '/login';
+
+
+# ============================================================================
+# 6. ERROR RESPONSE EXAMPLE - Validation Error
+# ============================================================================
+
+# Request with invalid duration:
+curl -X POST http://localhost:8000/api/v1/integration/workout/generate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "muscle_gain",
+    "duration_weeks": 100,
+    "frequency": 4,
+    "equipment": ["dumbbell"],
+    "intensity": "high"
+  }'
+
+# Response (HTTP 500):
+{
+  "success": false,
+  "request_id": "b2c3d4e5-f6g7-h8i9-j0k1-l2m3n4o5p6q7",
+  "error": "Duration must be between 1-52 weeks",
+  "error_type": "ValueError",
+  "metadata": {
+    "status": "validating",
+    "processing_time_ms": 45,
+    "errors": [
+      {
+        "timestamp": "2024-01-15T10:35:20.200Z",
+        "type": "ValueError",
+        "message": "Duration must be between 1-52 weeks",
+        "context": "workout_generation",
+        "traceback": "Traceback (most recent call last):\n  File \".../integration.py\", line 180, in _validate_workout_request\n    raise ValueError(\"Duration must be between 1-52 weeks\")\nValueError: Duration must be between 1-52 weeks"
+      }
+    ]
+  }
+}
+
+# Frontend handling:
+catch (error) {
+  const { error: message } = error.response.data;
+  setError(message);  // "Duration must be between 1-52 weeks"
+  // Highlight duration field
+  // Show validation error
+}
+
+
+# ============================================================================
+# 7. GENERATE NUTRITION PLAN (Similar flow)
+# ============================================================================
+
+# Request:
+curl -X POST http://localhost:8000/api/v1/integration/nutrition/generate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "muscle_gain",
+    "duration_days": 30,
+    "meals_per_day": 4,
+    "daily_calories": 2800,
+    "diet_type": "balanced",
+    "preferred_foods": ["chicken", "rice", "broccoli"],
+    "avoided_foods": ["peanuts"]
+  }'
+
+# Response (HTTP 200):
+{
+  "success": true,
+  "request_id": "c3d4e5f6-g7h8-i9j0-k1l2-m3n4o5p6q7r8",
+  "nutrition_plan": {
+    "id": 54321,
+    "name": "High-Protein Muscle Gain Meal Plan",
+    "description": "30-day personalized meal plan optimized for muscle growth...",
+    "goal": "muscle_gain",
+    "diet_type": "balanced",
+    "duration_days": 30,
+    "meals_per_day": 4,
+    "daily_calories": 2800,
+    "meals": [
+      {
+        "meal": 1,
+        "time": "08:00",
+        "name": "Breakfast",
+        "foods": [
+          {
+            "item": "Grilled Chicken Breast",
+            "amount": "200g",
+            "calories": 330,
+            "protein": 62,
+            "carbs": 0,
+            "fat": 7
+          },
+          {
+            "item": "Brown Rice",
+            "amount": "150g",
+            "calories": 195,
+            "protein": 4,
+            "carbs": 43,
+            "fat": 2
+          },
+          {
+            "item": "Broccoli",
+            "amount": "100g",
+            "calories": 34,
+            "protein": 3,
+            "carbs": 7,
+            "fat": 0
+          }
+        ],
+        "meal_totals": {
+          "calories": 559,
+          "protein": 69,
+          "carbs": 50,
+          "fat": 9
+        }
+      },
+      {
+        "meal": 2,
+        "time": "12:00",
+        "name": "Lunch",
+        "foods": [...]
+      }
+    ],
+    "daily_totals": {
+      "calories": 2800,
+      "protein": 230,
+      "carbs": 280,
+      "fat": 78
+    },
+    "ai_model": "claude-3-sonnet",
+    "tokens_used": 2156,
+    "rag_sources": [
+      {
+        "source": "s3://nutrition-documents/protein-requirements.pdf",
+        "score": 0.94
+      },
+      {
+        "source": "s3://nutrition-documents/meal-planning-guide.pdf",
+        "score": 0.88
+      },
+      {
+        "source": "s3://nutrition-documents/macro-ratios.pdf",
+        "score": 0.85
+      }
+    ],
+    "created_at": "2024-01-15T10:40:15.500Z",
+    "updated_at": "2024-01-15T10:40:15.500Z"
+  },
+  "metadata": {
+    "rag_documents": 3,
+    "tokens_used": 2156,
+    "processing_time_ms": 4200,
+    "status_timeline": { ... }
+  }
+}
+
+
+# ============================================================================
+# 8. RETRIEVE GENERATED PLANS
+# ============================================================================
+
+# Get all workouts:
+curl -X GET "http://localhost:8000/api/v1/workouts?limit=10&offset=0" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Response (HTTP 200):
+{
+  "plans": [
+    {
+      "id": 12345,
+      "name": "Progressive Muscle Gain Training Plan",
+      "goal": "muscle_gain",
+      "duration_weeks": 12,
+      "created_at": "2024-01-15T10:30:45.325Z"
+    },
+    {
+      "id": 12346,
+      "name": "Strength Building Program",
+      "goal": "strength",
+      "duration_weeks": 8,
+      "created_at": "2024-01-14T14:20:10.100Z"
+    }
+  ],
+  "total": 2
+}
+
+# Get specific workout:
+curl -X GET "http://localhost:8000/api/v1/workouts/12345" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Response includes full details
+
+
+# ============================================================================
+# 9. ASYNC PROCESSING EXAMPLE (For long-running requests)
+# ============================================================================
+
+# Start async task:
+curl -X POST http://localhost:8000/api/v1/integration/workout/generate/async \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal": "muscle_gain",
+    "duration_weeks": 12,
+    "frequency": 4,
+    "equipment": ["dumbbell", "barbell"],
+    "intensity": "high"
+  }'
+
+# Response (HTTP 202 Accepted):
+{
+  "status": "queued",
+  "task_id": "task-id-uuid",
+  "status_url": "/api/v1/integration/status/task-id-uuid"
+}
+
+# Poll for status:
+curl -X GET http://localhost:8000/api/v1/integration/status/task-id-uuid \
+  -H "Authorization: Bearer $TOKEN"
+
+# Response (HTTP 200) - Still processing:
+{
+  "task_id": "task-id-uuid",
+  "status": "PENDING",
+  "result": null,
+  "progress": {
+    "current": 3,
+    "total": 6,
+    "current_step": "calling_ai"
+  }
+}
+
+# Poll again after 5 seconds:
+curl -X GET http://localhost:8000/api/v1/integration/status/task-id-uuid \
+  -H "Authorization: Bearer $TOKEN"
+
+# Response (HTTP 200) - Completed:
+{
+  "task_id": "task-id-uuid",
+  "status": "SUCCESS",
+  "result": {
+    "success": true,
+    "request_id": "...",
+    "workout": { ... },
+    "metadata": { ... }
+  },
+  "progress": null
+}
+
+
+# ============================================================================
+# 10. LOGGING OUTPUT EXAMPLE
+# ============================================================================
+
+# When calling generate endpoint, check backend logs:
+
+2024-01-15 10:30:42.100 - app.services.integration - INFO - [a1b2c3d4] - Request status: initiated
+2024-01-15 10:30:42.125 - app.services.integration - INFO - [a1b2c3d4] - Request status: validating
+2024-01-15 10:30:42.125 - app.services.integration - INFO - [a1b2c3d4] - Validated workout request: muscle_gain for 12 weeks
+2024-01-15 10:30:42.150 - app.services.integration - INFO - [a1b2c3d4] - Request status: retrieving_context
+2024-01-15 10:30:42.200 - app.services.rag_retrieval - INFO - [a1b2c3d4] - Retrieved 3 documents from knowledge base
+2024-01-15 10:30:42.150 - app.services.integration - INFO - [a1b2c3d4] - Request status: calling_ai
+2024-01-15 10:30:45.150 - app.services.bedrock - INFO - [a1b2c3d4] - Bedrock responded in 2500ms
+2024-01-15 10:30:45.300 - app.services.integration - INFO - [a1b2c3d4] - Request status: storing_result
+2024-01-15 10:30:45.300 - app.services.integration - INFO - [a1b2c3d4] - Stored workout in database: id=12345
+2024-01-15 10:30:45.325 - app.services.integration - INFO - [a1b2c3d4] - Request status: completed
+2024-01-15 10:30:45.325 - app.services.integration - INFO - [a1b2c3d4] - Integration metrics: {...}
+
+# All logs include request_id [a1b2c3d4] for easy tracing
+
+
+# ============================================================================
+# TESTING CHECKLIST
+# ============================================================================
+
+Test successful flow:
+  ✓ Register user
+  ✓ Login to get token
+  ✓ Update profile
+  ✓ Generate workout
+  ✓ Verify response structure
+  ✓ Check metadata (tokens, time, documents)
+
+Test error handling:
+  ✓ Invalid token → 401
+  ✓ Invalid parameters → 500 with error details
+  ✓ Missing required fields → validation error
+  ✓ Database error → 500 with traceback
+  ✓ Bedrock timeout → 500 with error type
+
+Test performance:
+  ✓ Single request completes < 10 seconds
+  ✓ Processing timeline shows step breakdown
+  ✓ Token usage reasonable (< 2000 per request)
+  ✓ RAG retrieval < 1 second
+
+Test logging:
+  ✓ All logs include request_id
+  ✓ Each step logged with duration
+  ✓ Errors logged with full context
+  ✓ Final metrics include all details
+
+Test scalability:
+  ✓ Handle 10 concurrent requests
+  ✓ Cache working (same query returns faster)
+  ✓ Database connections don't exhaust
+  ✓ Load balancer distributes evenly
+"""
