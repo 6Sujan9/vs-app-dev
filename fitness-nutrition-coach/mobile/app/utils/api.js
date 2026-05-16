@@ -1,68 +1,27 @@
-// API Configuration
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const apiConfig = {
-  baseURL: API_BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-};
+// ⚠️ Change this IP to match your PC's IP address on your current network
+export const API_BASE_URL = 'http://192.168.1.108:8000/api/v1';
 
-export const endpoints = {
-  auth: {
-    register: '/auth/register',
-    login: '/auth/login',
-    refresh: '/auth/refresh',
-  },
-  users: {
-    profile: '/users/profile',
-    metrics: '/users/metrics',
-  },
-  workouts: {
-    generate: '/workouts/generate',
-    list: '/workouts/',
-    detail: (id) => `/workouts/${id}`,
-  },
-  nutrition: {
-    generate: '/nutrition/generate',
-    list: '/nutrition/',
-    detail: (id) => `/nutrition/${id}`,
-  },
-  chat: {
-    send: '/chat/send',
-    history: '/chat/history',
-  },
-  progress: {
-    log: '/progress/log',
-    list: '/progress/',
-    analytics: '/progress/analytics',
-  },
-};
+// Called by AuthContext to inject the logout function so api.js can trigger it
+let _onSessionExpired = null;
+export const setSessionExpiredHandler = (handler) => { _onSessionExpired = handler; };
 
-// ============================================================================
-// API FUNCTIONS
-// ============================================================================
-
-// Helper function to get auth token
-const getAuthToken = () => {
-  // In a real app, this would come from secure storage
-  return null; // TODO: Implement secure token storage
-};
-
-// Helper function to make API requests
 const makeRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = getAuthToken();
+  const token = await AsyncStorage.getItem('access_token');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   const config = {
     method: options.method || 'GET',
+    signal: controller.signal,
     headers: {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
-    ...options,
   };
 
   if (options.body) {
@@ -71,167 +30,92 @@ const makeRequest = async (endpoint, options = {}) => {
 
   try {
     const response = await fetch(url, config);
+    clearTimeout(timeoutId);
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || data.message || 'API request failed');
+      if (response.status === 401) {
+        const isAuthEndpoint = endpoint.includes('/auth/');
+        if (!isAuthEndpoint && _onSessionExpired) {
+          // Auto-logout and redirect to login screen
+          await AsyncStorage.removeItem('access_token');
+          await AsyncStorage.removeItem('user_data');
+          _onSessionExpired();
+          return;
+        }
+        throw new Error(isAuthEndpoint ? 'Invalid email or password' : 'Session expired. Please login again.');
+      }
+      // FastAPI validation errors return detail as an array
+      const detail = data.detail;
+      if (Array.isArray(detail)) {
+        const msg = detail.map((e) => e.msg || e.message || JSON.stringify(e)).join(', ');
+        throw new Error(msg);
+      }
+      throw new Error(detail || data.message || 'Request failed');
     }
 
     return data;
-  } catch (error) {
-    console.error('API Error:', error);
-    throw error;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error(
+        `Cannot connect to server at ${API_BASE_URL}.\n\nCheck:\n1. Backend is running\n2. Phone and PC on same WiFi\n3. IP address in api.js`
+      );
+    }
+    throw err;
   }
 };
-
-// ============================================================================
-// AUTH API
-// ============================================================================
 
 export const authAPI = {
-  register: async (userData) => {
-    return makeRequest(endpoints.auth.register, {
-      method: 'POST',
-      body: userData,
-    });
-  },
-
-  login: async (credentials) => {
-    return makeRequest(endpoints.auth.login, {
-      method: 'POST',
-      body: credentials,
-    });
-  },
-
-  refreshToken: async (refreshToken) => {
-    return makeRequest(endpoints.auth.refresh, {
-      method: 'POST',
-      body: { refresh_token: refreshToken },
-    });
-  },
+  register: (userData) => makeRequest('/auth/register', { method: 'POST', body: userData }),
+  login: (credentials) => makeRequest('/auth/login', { method: 'POST', body: credentials }),
 };
-
-// ============================================================================
-// USER API
-// ============================================================================
 
 export const userAPI = {
-  getProfile: async () => {
-    return makeRequest(endpoints.users.profile);
-  },
-
-  updateProfile: async (profileData) => {
-    return makeRequest(endpoints.users.profile, {
-      method: 'PUT',
-      body: profileData,
-    });
-  },
-
-  updateMetrics: async (metricsData) => {
-    return makeRequest(endpoints.users.metrics, {
-      method: 'PUT',
-      body: metricsData,
-    });
-  },
+  getProfile: () => makeRequest('/users/profile'),
+  updateProfile: (data) => makeRequest('/users/profile', { method: 'POST', body: data }),
 };
-
-// ============================================================================
-// WORKOUT API
-// ============================================================================
 
 export const workoutAPI = {
-  generateWorkout: async (workoutRequest) => {
-    return makeRequest(endpoints.workouts.generate, {
-      method: 'POST',
-      body: workoutRequest,
-    });
+  getWorkouts: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return makeRequest(`/workouts/${q ? '?' + q : ''}`);
   },
-
-  getWorkouts: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `${endpoints.workouts.list}?${queryString}` : endpoints.workouts.list;
-    return makeRequest(endpoint);
-  },
-
-  getWorkout: async (id) => {
-    return makeRequest(endpoints.workouts.detail(id));
-  },
+  generateWorkout: (data) => makeRequest('/workouts/generate', { method: 'POST', body: data }),
+  updateWorkout: (id, data) => makeRequest(`/workouts/${id}`, { method: 'PATCH', body: data }),
+  deleteWorkout: (id) => makeRequest(`/workouts/${id}`, { method: 'DELETE' }),
 };
-
-// ============================================================================
-// NUTRITION API
-// ============================================================================
 
 export const nutritionAPI = {
-  generateNutrition: async (nutritionRequest) => {
-    return makeRequest(endpoints.nutrition.generate, {
-      method: 'POST',
-      body: nutritionRequest,
-    });
+  getMealPlans: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return makeRequest(`/nutrition/${q ? '?' + q : ''}`);
   },
-
-  getNutritionPlans: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `${endpoints.nutrition.list}?${queryString}` : endpoints.nutrition.list;
-    return makeRequest(endpoint);
-  },
-
-  getNutritionPlan: async (id) => {
-    return makeRequest(endpoints.nutrition.detail(id));
-  },
+  generateMealPlan: (data) => makeRequest('/nutrition/generate', { method: 'POST', body: data }),
+  updateMealPlan: (id, data) => makeRequest(`/nutrition/${id}`, { method: 'PATCH', body: data }),
+  deleteMealPlan: (id) => makeRequest(`/nutrition/${id}`, { method: 'DELETE' }),
 };
-
-// ============================================================================
-// CHAT API
-// ============================================================================
 
 export const chatAPI = {
-  sendMessage: async (message) => {
-    return makeRequest(endpoints.chat.send, {
-      method: 'POST',
-      body: { message },
-    });
-  },
-
-  getChatHistory: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `${endpoints.chat.history}?${queryString}` : endpoints.chat.history;
-    return makeRequest(endpoint);
+  sendMessage: (message) => makeRequest('/chat/send', { method: 'POST', body: { message } }),
+  getChatHistory: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return makeRequest(`/chat/history${q ? '?' + q : ''}`);
   },
 };
-
-// ============================================================================
-// PROGRESS API
-// ============================================================================
 
 export const progressAPI = {
-  logProgress: async (progressData) => {
-    return makeRequest(endpoints.progress.log, {
-      method: 'POST',
-      body: progressData,
-    });
+  logProgress: (data) => makeRequest('/progress/log', { method: 'POST', body: data }),
+  getProgress: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return makeRequest(`/progress/${q ? '?' + q : ''}`);
   },
-
-  getProgress: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `${endpoints.progress.list}?${queryString}` : endpoints.progress.list;
-    return makeRequest(endpoint);
-  },
-
-  getAnalytics: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `${endpoints.progress.analytics}?${queryString}` : endpoints.progress.analytics;
-    return makeRequest(endpoint);
+  updateProgress: (id, data) => makeRequest(`/progress/${id}`, { method: 'PATCH', body: data }),
+  deleteProgress: (id) => makeRequest(`/progress/${id}`, { method: 'DELETE' }),
+  getAnalytics: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return makeRequest(`/progress/analytics${q ? '?' + q : ''}`);
   },
 };
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-export const getErrorMessage = (error) => {
-  if (error.message) {
-    return error.message;
-  }
-  return 'An error occurred. Please try again.';
-};
+export const getErrorMessage = (error) => error?.message || 'An error occurred. Please try again.';

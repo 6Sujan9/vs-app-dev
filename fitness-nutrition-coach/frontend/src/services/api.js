@@ -9,6 +9,13 @@ const apiClient = axios.create({
   },
 });
 
+// Separate client for the Bedrock /chat endpoint (no /api/v1 prefix)
+const bedrockClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 60000, // KB queries can take a few seconds
+  headers: { 'Content-Type': 'application/json' },
+});
+
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
@@ -79,7 +86,7 @@ export const authAPI = {
 
 export const userAPI = {
   getProfile: () => apiClient.get('/users/profile'),
-  updateProfile: (profileData) => apiClient.put('/users/profile', profileData),
+  updateProfile: (profileData) => apiClient.post('/users/profile', profileData),
   getMetrics: () => apiClient.get('/users/metrics'),
   updateGoals: (goals) => apiClient.put('/users/goals', { goals }),
 };
@@ -107,6 +114,12 @@ export const chatAPI = {
   getChatHistory: (params = {}) => apiClient.get('/chat/history', { params }),
   clearHistory: () => apiClient.post('/chat/clear-history'),
   sendFeedback: (messageId, feedback) => apiClient.post(`/chat/${messageId}/feedback`, { feedback }),
+};
+
+// Bedrock Knowledge Base chat — uses retrieve_and_generate
+export const bedrockChatAPI = {
+  sendMessage: (message, sessionId = null) =>
+    bedrockClient.post('/chat', { message, session_id: sessionId }),
 };
 
 export const progressAPI = {

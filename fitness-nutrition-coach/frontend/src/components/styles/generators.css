@@ -81,9 +81,14 @@
   padding: 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: 0.5rem;
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-family: inherit;
   transition: all 0.3s ease;
+}
+
+.generator-form .form-group select option {
+  font-size: 1rem;
+  font-family: inherit;
 }
 
 .generator-form .form-group input:focus,

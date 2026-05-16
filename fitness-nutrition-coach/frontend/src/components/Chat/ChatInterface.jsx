@@ -53,15 +53,14 @@ const ChatInterface = () => {
     setLoading(true);
 
     try {
-      // Call backend API
       const response = await chatAPI.sendMessage(trimmedInput);
 
       const aiMessage = {
         id: `ai-${Date.now()}`,
         type: 'ai',
-        content: response.data.response || response.data.message,
+        content: response.data.ai_response,
         timestamp: new Date(),
-        metadata: response.data.metadata || {},
+        metadata: { sources: response.data.rag_context_used || [] },
       };
 
       setMessages((prev) => [...prev, aiMessage]);

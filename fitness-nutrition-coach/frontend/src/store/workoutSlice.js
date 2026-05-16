@@ -26,6 +26,18 @@ export const fetchWorkouts = createAsyncThunk('workout/fetchList', async (params
 });
 
 /**
+ * Delete workout
+ */
+export const deleteWorkout = createAsyncThunk('workout/delete', async (workoutId, { rejectWithValue }) => {
+  try {
+    await workoutAPI.deleteWorkout(workoutId);
+    return workoutId;
+  } catch (error) {
+    return rejectWithValue(error.response?.data?.detail || 'Failed to delete workout');
+  }
+});
+
+/**
  * Fetch single workout
  */
 export const fetchWorkout = createAsyncThunk('workout/fetchOne', async (workoutId, { rejectWithValue }) => {
@@ -84,6 +96,12 @@ const workoutSlice = createSlice({
       .addCase(fetchWorkouts.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      });
+
+    // Delete Workout
+    builder
+      .addCase(deleteWorkout.fulfilled, (state, action) => {
+        state.workouts = state.workouts.filter((w) => w.id !== action.payload);
       });
 
     // Fetch Single Workout

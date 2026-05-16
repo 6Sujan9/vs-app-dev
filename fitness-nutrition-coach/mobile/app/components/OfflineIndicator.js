@@ -63,8 +63,6 @@ const styles = StyleSheet.create({
   },
 });
 
-export default OfflineIndicator;
-
 /**
  * Floating offline indicator that appears at bottom
  */

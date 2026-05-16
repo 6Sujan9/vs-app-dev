@@ -25,6 +25,18 @@ export const fetchMealPlans = createAsyncThunk('nutrition/fetchList', async (par
   }
 });
 
+/**
+ * Delete meal plan
+ */
+export const deleteMealPlan = createAsyncThunk('nutrition/delete', async (planId, { rejectWithValue }) => {
+  try {
+    await nutritionAPI.deleteMealPlan(planId);
+    return planId;
+  } catch (error) {
+    return rejectWithValue(error.response?.data?.detail || 'Failed to delete meal plan');
+  }
+});
+
 const initialState = {
   mealPlans: [],
   currentMealPlan: null,
@@ -58,6 +70,12 @@ const nutritionSlice = createSlice({
       .addCase(generateMealPlan.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      });
+
+    // Delete Meal Plan
+    builder
+      .addCase(deleteMealPlan.fulfilled, (state, action) => {
+        state.mealPlans = state.mealPlans.filter((p) => p.id !== action.payload);
       });
 
     // Fetch Meal Plans

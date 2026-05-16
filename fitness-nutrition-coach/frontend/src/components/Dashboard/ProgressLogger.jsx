@@ -2,25 +2,21 @@ import React, { useState } from 'react';
 import { progressAPI, getErrorMessage } from '../../services/api';
 import '../styles/generators.css';
 
-/**
- * Progress Logger Component
- * Log fitness progress including weight, measurements, and metrics
- */
-const ProgressLogger = ({ onClose }) => {
+const ProgressLogger = ({ onClose, editLog }) => {
+  const isEditing = !!editLog;
+
   const [formData, setFormData] = useState({
-    weight: '',
-    bodyFat: '',
-    muscleMass: '',
-    measurements: {
-      chest: '',
-      waist: '',
-      hips: '',
-      thighs: '',
-      arms: '',
-    },
-    exercisesCompleted: '',
-    mealsLogged: '',
-    notes: '',
+    weight: editLog?.weight ?? '',
+    body_fat_percentage: editLog?.body_fat_percentage ?? '',
+    muscle_mass: editLog?.muscle_mass ?? '',
+    chest: editLog?.chest ?? '',
+    waist: editLog?.waist ?? '',
+    hips: editLog?.hips ?? '',
+    thighs: editLog?.thighs ?? '',
+    arms: editLog?.arms ?? '',
+    exercises_completed: editLog?.exercises_completed ?? '',
+    meals_logged: editLog?.meals_logged ?? '',
+    notes: editLog?.notes ?? '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -29,71 +25,40 @@ const ProgressLogger = ({ onClose }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     setError(null);
   };
 
-  const handleMeasurementChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      measurements: {
-        ...prev.measurements,
-        [name]: value,
-      },
-    }));
-  };
+  const num = (v) => (v !== '' && v != null ? parseFloat(v) : null);
+  const int = (v) => (v !== '' && v != null ? parseInt(v) : null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setSuccess(false);
 
     const payload = {
-      date: new Date().toISOString().split('T')[0],
-      weight: formData.weight ? parseFloat(formData.weight) : null,
-      exercises_completed: formData.exercisesCompleted ? parseInt(formData.exercisesCompleted) : 0,
-      meals_logged: formData.mealsLogged ? parseInt(formData.mealsLogged) : 0,
-      notes: formData.notes,
-      metrics: {
-        body_fat: formData.bodyFat ? parseFloat(formData.bodyFat) : null,
-        muscle_mass: formData.muscleMass ? parseFloat(formData.muscleMass) : null,
-        measurements: {
-          chest: formData.measurements.chest ? parseFloat(formData.measurements.chest) : null,
-          waist: formData.measurements.waist ? parseFloat(formData.measurements.waist) : null,
-          hips: formData.measurements.hips ? parseFloat(formData.measurements.hips) : null,
-          thighs: formData.measurements.thighs ? parseFloat(formData.measurements.thighs) : null,
-          arms: formData.measurements.arms ? parseFloat(formData.measurements.arms) : null,
-        },
-      },
+      weight: num(formData.weight),
+      body_fat_percentage: num(formData.body_fat_percentage),
+      muscle_mass: num(formData.muscle_mass),
+      chest: num(formData.chest),
+      waist: num(formData.waist),
+      hips: num(formData.hips),
+      thighs: num(formData.thighs),
+      arms: num(formData.arms),
+      exercises_completed: int(formData.exercises_completed),
+      meals_logged: int(formData.meals_logged),
+      notes: formData.notes || null,
     };
 
     try {
+      // If editing: delete old entry then create new one
+      if (isEditing) {
+        await progressAPI.deleteProgressEntry(editLog.id);
+      }
       await progressAPI.logProgress(payload);
       setSuccess(true);
-      setFormData({
-        weight: '',
-        bodyFat: '',
-        muscleMass: '',
-        measurements: {
-          chest: '',
-          waist: '',
-          hips: '',
-          thighs: '',
-          arms: '',
-        },
-        exercisesCompleted: '',
-        mealsLogged: '',
-        notes: '',
-      });
-
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      setTimeout(() => onClose(), 1000);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -103,152 +68,66 @@ const ProgressLogger = ({ onClose }) => {
 
   return (
     <div className="generator-card">
-      <h3>Log Progress</h3>
+      <h3>{isEditing ? 'Edit Progress Entry' : 'Log Today\'s Progress'}</h3>
+      {isEditing && (
+        <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+          Update the values below. The old entry will be replaced with your changes.
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="generator-form">
-        {/* Weight & Body Metrics */}
+        {/* Body Metrics */}
         <div className="form-section">
-          <h4>Weight & Body Metrics</h4>
-
+          <h4>Body Metrics</h4>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="weight">Weight (kg)</label>
-              <input
-                type="number"
-                id="weight"
-                name="weight"
-                value={formData.weight}
-                onChange={handleChange}
-                step="0.1"
-                placeholder="Your current weight"
-              />
+              <input type="number" id="weight" name="weight" value={formData.weight}
+                onChange={handleChange} step="0.1" min="0" placeholder="e.g. 75.5" />
             </div>
-
             <div className="form-group">
-              <label htmlFor="bodyFat">Body Fat %</label>
-              <input
-                type="number"
-                id="bodyFat"
-                name="bodyFat"
-                value={formData.bodyFat}
-                onChange={handleChange}
-                step="0.1"
-                placeholder="Estimated body fat %"
-              />
+              <label htmlFor="body_fat_percentage">Body Fat %</label>
+              <input type="number" id="body_fat_percentage" name="body_fat_percentage"
+                value={formData.body_fat_percentage} onChange={handleChange}
+                step="0.1" min="0" max="70" placeholder="e.g. 18.5" />
             </div>
-
             <div className="form-group">
-              <label htmlFor="muscleMass">Muscle Mass (kg)</label>
-              <input
-                type="number"
-                id="muscleMass"
-                name="muscleMass"
-                value={formData.muscleMass}
-                onChange={handleChange}
-                step="0.1"
-                placeholder="Lean muscle mass"
-              />
+              <label htmlFor="muscle_mass">Muscle Mass (kg)</label>
+              <input type="number" id="muscle_mass" name="muscle_mass"
+                value={formData.muscle_mass} onChange={handleChange}
+                step="0.1" min="0" placeholder="e.g. 55" />
             </div>
           </div>
         </div>
 
         {/* Measurements */}
         <div className="form-section">
-          <h4>Body Measurements (cm)</h4>
-
+          <h4>Measurements (cm)</h4>
           <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="chest">Chest</label>
-              <input
-                type="number"
-                id="chest"
-                name="chest"
-                value={formData.measurements.chest}
-                onChange={handleMeasurementChange}
-                step="0.1"
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="waist">Waist</label>
-              <input
-                type="number"
-                id="waist"
-                name="waist"
-                value={formData.measurements.waist}
-                onChange={handleMeasurementChange}
-                step="0.1"
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="hips">Hips</label>
-              <input
-                type="number"
-                id="hips"
-                name="hips"
-                value={formData.measurements.hips}
-                onChange={handleMeasurementChange}
-                step="0.1"
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="thighs">Thighs</label>
-              <input
-                type="number"
-                id="thighs"
-                name="thighs"
-                value={formData.measurements.thighs}
-                onChange={handleMeasurementChange}
-                step="0.1"
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="arms">Arms</label>
-              <input
-                type="number"
-                id="arms"
-                name="arms"
-                value={formData.measurements.arms}
-                onChange={handleMeasurementChange}
-                step="0.1"
-              />
-            </div>
+            {['chest', 'waist', 'hips', 'thighs', 'arms'].map((field) => (
+              <div className="form-group" key={field}>
+                <label htmlFor={field}>{field.charAt(0).toUpperCase() + field.slice(1)}</label>
+                <input type="number" id={field} name={field}
+                  value={formData[field]} onChange={handleChange}
+                  step="0.1" min="0" placeholder="cm" />
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Activity */}
         <div className="form-section">
-          <h4>Activity Today</h4>
-
+          <h4>Activity</h4>
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="exercisesCompleted">Exercises Completed</label>
-              <input
-                type="number"
-                id="exercisesCompleted"
-                name="exercisesCompleted"
-                value={formData.exercisesCompleted}
-                onChange={handleChange}
-                min="0"
-                placeholder="Number of exercises done today"
-              />
+              <label htmlFor="exercises_completed">Exercises Done</label>
+              <input type="number" id="exercises_completed" name="exercises_completed"
+                value={formData.exercises_completed} onChange={handleChange} min="0" placeholder="0" />
             </div>
-
             <div className="form-group">
-              <label htmlFor="mealsLogged">Meals Logged</label>
-              <input
-                type="number"
-                id="mealsLogged"
-                name="mealsLogged"
-                value={formData.mealsLogged}
-                onChange={handleChange}
-                min="0"
-                max="6"
-                placeholder="Number of meals logged"
-              />
+              <label htmlFor="meals_logged">Meals Logged</label>
+              <input type="number" id="meals_logged" name="meals_logged"
+                value={formData.meals_logged} onChange={handleChange} min="0" max="10" placeholder="0" />
             </div>
           </div>
         </div>
@@ -256,22 +135,16 @@ const ProgressLogger = ({ onClose }) => {
         {/* Notes */}
         <div className="form-group">
           <label htmlFor="notes">Notes (optional)</label>
-          <textarea
-            id="notes"
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            placeholder="How did you feel? Any observations or concerns?"
-            rows="3"
-          />
+          <textarea id="notes" name="notes" value={formData.notes} onChange={handleChange}
+            placeholder="How did you feel? Any observations..." rows="2" />
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
-        {success && <div className="alert alert-success">✓ Progress logged successfully!</div>}
+        {success && <div className="alert alert-success">{isEditing ? 'Entry updated!' : 'Progress saved!'}</div>}
 
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Saving...' : 'Log Progress'}
+            {loading ? 'Saving...' : isEditing ? 'Update Entry' : 'Save Progress'}
           </button>
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
             Cancel

@@ -1,24 +1,21 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { generateWorkout, fetchWorkouts } from '../../store/workoutSlice';
+import { generateWorkout, fetchWorkouts, deleteWorkout } from '../../store/workoutSlice';
 import { getErrorMessage } from '../../services/api';
+import CustomSelect from '../CustomSelect';
 import '../styles/generators.css';
 
-/**
- * Workout Generator Component
- * AI-powered workout plan generation
- */
-const WorkoutGenerator = ({ onClose }) => {
+const WorkoutGenerator = ({ onClose, editWorkout }) => {
   const dispatch = useDispatch();
-  const { profile } = useSelector((state) => state.user);
-  const { loading, error } = useSelector((state) => state.workout);
+  const { loading } = useSelector((state) => state.workout);
+  const isEditing = !!editWorkout;
 
   const [formData, setFormData] = useState({
-    goal: 'muscle_gain',
-    duration: 4,
-    frequency: 4,
-    equipment: ['dumbbells', 'barbell'],
-    intensity: 'moderate',
+    goal: editWorkout?.goal || 'muscle_gain',
+    duration: editWorkout?.duration_weeks || 4,
+    frequency: editWorkout?.frequency || 4,
+    equipment: editWorkout?.equipment || ['dumbbells', 'barbell'],
+    intensity: editWorkout?.intensity || 'moderate',
     specificRequirements: '',
   });
 
@@ -26,10 +23,7 @@ const WorkoutGenerator = ({ onClose }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     setGenerationError(null);
   };
 
@@ -37,7 +31,9 @@ const WorkoutGenerator = ({ onClose }) => {
     const { value, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
-      equipment: checked ? [...prev.equipment, value] : prev.equipment.filter((eq) => eq !== value),
+      equipment: checked
+        ? [...prev.equipment, value]
+        : prev.equipment.filter((eq) => eq !== value),
     }));
   };
 
@@ -47,7 +43,7 @@ const WorkoutGenerator = ({ onClose }) => {
     const payload = {
       goal: formData.goal,
       duration_weeks: parseInt(formData.duration),
-      frequency_per_week: parseInt(formData.frequency),
+      frequency: parseInt(formData.frequency),
       equipment: formData.equipment,
       intensity: formData.intensity,
       specific_requirements: formData.specificRequirements,
@@ -55,65 +51,75 @@ const WorkoutGenerator = ({ onClose }) => {
 
     try {
       const result = await dispatch(generateWorkout(payload));
-      if (result.payload) {
-        // Refresh workouts list
+      if (result.meta?.requestStatus === 'fulfilled') {
+        // If editing, delete the old plan after new one is created
+        if (isEditing) {
+          await dispatch(deleteWorkout(editWorkout.id));
+        }
         dispatch(fetchWorkouts({ limit: 10 }));
         onClose();
+      } else {
+        setGenerationError(result.payload || 'Failed to generate workout');
       }
-    } catch (error) {
-      setGenerationError(getErrorMessage(error));
+    } catch (err) {
+      setGenerationError(getErrorMessage(err));
     }
   };
 
   return (
     <div className="generator-card">
-      <h3>Generate Workout Plan</h3>
+      <h3>{isEditing ? `Edit: ${editWorkout.name}` : 'Generate Workout Plan'}</h3>
+      {isEditing && (
+        <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+          Adjust the settings below and click Regenerate. A new AI plan will be created and the old one removed.
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="generator-form">
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="goal">Fitness Goal</label>
-            <select id="goal" name="goal" value={formData.goal} onChange={handleChange}>
+            <label>Fitness Goal</label>
+            <CustomSelect name="goal" value={formData.goal} onChange={handleChange}>
               <option value="muscle_gain">Muscle Gain</option>
               <option value="weight_loss">Weight Loss</option>
               <option value="endurance">Endurance</option>
               <option value="strength">Strength</option>
               <option value="flexibility">Flexibility</option>
-            </select>
+            </CustomSelect>
           </div>
 
           <div className="form-group">
-            <label htmlFor="duration">Duration (weeks)</label>
-            <select id="duration" name="duration" value={formData.duration} onChange={handleChange}>
+            <label>Duration (weeks)</label>
+            <CustomSelect name="duration" value={String(formData.duration)} onChange={handleChange}>
               <option value="2">2 weeks</option>
               <option value="4">4 weeks</option>
               <option value="6">6 weeks</option>
               <option value="8">8 weeks</option>
               <option value="12">12 weeks</option>
-            </select>
+            </CustomSelect>
           </div>
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="frequency">Sessions per Week</label>
-            <select id="frequency" name="frequency" value={formData.frequency} onChange={handleChange}>
+            <label>Sessions per Week</label>
+            <CustomSelect name="frequency" value={String(formData.frequency)} onChange={handleChange}>
               <option value="2">2x per week</option>
               <option value="3">3x per week</option>
               <option value="4">4x per week</option>
               <option value="5">5x per week</option>
               <option value="6">6x per week</option>
-            </select>
+            </CustomSelect>
           </div>
 
           <div className="form-group">
-            <label htmlFor="intensity">Intensity</label>
-            <select id="intensity" name="intensity" value={formData.intensity} onChange={handleChange}>
+            <label>Intensity</label>
+            <CustomSelect name="intensity" value={formData.intensity} onChange={handleChange}>
               <option value="light">Light</option>
               <option value="moderate">Moderate</option>
               <option value="high">High</option>
               <option value="very_high">Very High</option>
-            </select>
+            </CustomSelect>
           </div>
         </div>
 
@@ -150,7 +156,9 @@ const WorkoutGenerator = ({ onClose }) => {
 
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Generating Workout...' : 'Generate Workout'}
+            {loading
+              ? isEditing ? 'Regenerating...' : 'Generating Workout...'
+              : isEditing ? 'Regenerate Workout' : 'Generate Workout'}
           </button>
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
             Cancel

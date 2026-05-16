@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, AppState } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
+
+import { AuthProvider, useAuth } from './app/context/AuthContext';
 
 // Components
 import SplashScreen from './app/components/SplashScreen';
@@ -13,18 +15,18 @@ import OfflineIndicator from './app/components/OfflineIndicator';
 // Utils
 import errorHandler from './app/utils/errorHandler';
 import offlineDetection from './app/utils/offlineDetection';
-import pushNotificationService from './app/utils/pushNotifications';
 
 // Screens
+import LoginScreen from './app/screens/LoginScreen';
+import ProfileSetupScreen from './app/screens/ProfileSetupScreen';
 import HomeScreen from './app/screens/HomeScreen';
 import WorkoutsScreen from './app/screens/WorkoutsScreen';
 import NutritionScreen from './app/screens/NutritionScreen';
 import ChatScreen from './app/screens/ChatScreen';
 import ProfileScreen from './app/screens/ProfileScreen';
-import WebViewScreen from './app/screens/WebViewScreen';
-import ScannerScreen from './app/screens/ScannerScreen';
+import ProgressScreen from './app/screens/ProgressScreen';
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function HomeTabs() {
@@ -36,63 +38,61 @@ function HomeTabs() {
         headerShown: true,
       }}
     >
-      <Tab.Screen 
-        name="Home" 
+      <Tab.Screen
+        name="Home"
         component={HomeScreen}
-        options={{
-          tabBarLabel: 'Home',
-          headerTitle: 'Fitness Nutrition Coach',
-        }}
-      />
-      <Tab.Screen 
-        name="Workouts" 
-        component={WorkoutsScreen}
-        options={{
-          tabBarLabel: 'Workouts',
-          headerTitle: 'My Workouts',
-        }}
-      />
-      <Tab.Screen 
-        name="Nutrition" 
-        component={NutritionScreen}
-        options={{
-          tabBarLabel: 'Nutrition',
-          headerTitle: 'Nutrition Plans',
-        }}
-      />
-      <Tab.Screen 
-        name="Chat" 
-        component={ChatScreen}
-        options={{
-          tabBarLabel: 'Chat',
-          headerTitle: 'AI Coach',
-        }}
-      />
-      <Tab.Screen 
-        name="Profile" 
-        component={ProfileScreen}
-        options={{
-          tabBarLabel: 'Profile',
-          headerTitle: 'My Profile',
-        }}
+        options={{ tabBarLabel: 'Home', headerTitle: 'Fitness Coach' }}
       />
       <Tab.Screen
-        name="Scanner"
-        component={ScannerScreen}
-        options={{
-          tabBarLabel: 'Scanner',
-          headerTitle: 'QR Scanner',
-        }}
+        name="Workouts"
+        component={WorkoutsScreen}
+        options={{ tabBarLabel: 'Workouts', headerTitle: 'My Workouts' }}
       />
-      <Tab.Screen 
-        name="Website" 
-        component={WebViewScreen}
-        options={{
-          tabBarLabel: 'Website',
-          headerTitle: 'Website',
-        }}
+      <Tab.Screen
+        name="Nutrition"
+        component={NutritionScreen}
+        options={{ tabBarLabel: 'Nutrition', headerTitle: 'Nutrition Plans' }}
+      />
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{ tabBarLabel: 'Chat', headerTitle: 'AI Coach' }}
+      />
+      <Tab.Screen
+        name="Progress"
+        component={ProgressScreen}
+        options={{ tabBarLabel: 'Progress', headerTitle: 'My Progress' }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarLabel: 'Profile', headerTitle: 'My Profile' }}
       />
     </Tab.Navigator>
+  );
+}
+
+function RootNavigator() {
+  const { user, loading, needsProfileSetup } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {!user ? (
+        <Stack.Screen name="Login" component={LoginScreen} />
+      ) : needsProfileSetup ? (
+        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
+      ) : (
+        <Stack.Screen name="MainTabs" component={HomeTabs} />
+      )}
+    </Stack.Navigator>
   );
 }
 
@@ -100,100 +100,51 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [appState, setAppState] = useState(AppState.currentState);
 
-  const handleSplashFinish = () => {
-    setShowSplash(false);
-  };
-
-  // Initialize services on app start
   useEffect(() => {
     const initServices = async () => {
       try {
-        // Initialize offline detection
         await offlineDetection.initialize();
-
-        // Initialize push notifications
-        const token = await pushNotificationService.initialize();
-        if (token) {
-          console.log('Push notifications enabled. Token:', token);
-        } else {
-          console.log('Push notifications not available');
-        }
-
-        // Subscribe to errors
         const unsubscribeErrors = errorHandler.subscribe((error) => {
           console.log('Error event:', error);
-          // Could show error UI here if needed
         });
-
         return unsubscribeErrors;
       } catch (error) {
         console.error('Error initializing services:', error);
       }
     };
-
     const unsubscribe = initServices();
-
     return () => {
-      if (unsubscribe instanceof Function) {
-        unsubscribe();
-      }
+      if (unsubscribe instanceof Function) unsubscribe();
     };
   }, []);
 
-  // Handle app state changes (background/foreground)
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-
-    return () => {
-      subscription.remove();
-    };
-  }, [appState]);
-
-  const handleAppStateChange = (nextAppState) => {
-    if (appState.match(/inactive|background/) && nextAppState === 'active') {
-      // App has come to foreground
-      console.log('App came to foreground');
-      // Re-initialize connections if needed
-    }
-
-    setAppState(nextAppState);
-  };
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      setAppState(nextAppState);
+    });
+    return () => subscription.remove();
+  }, []);
 
   if (showSplash) {
-    return <SplashScreen onFinish={handleSplashFinish} />;
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
   return (
-    <ErrorBoundary
-      message="The app encountered an error. Please restart the app."
-      onReset={() => {
-        // Reset app state if needed
-      }}
-    >
-      <View style={styles.container}>
-        <OfflineIndicator />
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="MainTabs" component={HomeTabs} />
-          </Stack.Navigator>
-          <StatusBar barStyle="dark-content" />
-        </NavigationContainer>
-      </View>
+    <ErrorBoundary message="The app encountered an error. Please restart the app." onReset={() => {}}>
+      <AuthProvider>
+        <View style={styles.container}>
+          <OfflineIndicator />
+          <NavigationContainer>
+            <RootNavigator />
+            <StatusBar barStyle="dark-content" />
+          </NavigationContainer>
+        </View>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
 });

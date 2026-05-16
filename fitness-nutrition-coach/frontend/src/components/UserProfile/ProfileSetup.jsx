@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUserProfile } from '../../store/userSlice';
+import CustomSelect from '../CustomSelect';
 import '../styles/forms.css';
 
 /**
@@ -111,13 +112,15 @@ const ProfileSetup = () => {
       fitness_level: formData.fitnessLevel,
       goals: formData.goals,
       dietary_restrictions: formData.dietaryRestrictions,
-      medical_conditions: formData.medicalConditions,
-      profile_completed: true,
+      // backend expects List[str] — split the textarea on commas/newlines
+      medical_conditions: formData.medicalConditions
+        ? formData.medicalConditions.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean)
+        : [],
     };
 
     try {
       const result = await dispatch(updateUserProfile(payload));
-      if (result.payload) {
+      if (result.meta?.requestStatus === 'fulfilled') {
         navigate('/dashboard');
       }
     } catch (error) {
@@ -153,12 +156,12 @@ const ProfileSetup = () => {
               </div>
 
               <div className="form-group">
-                <label htmlFor="gender">Gender</label>
-                <select id="gender" name="gender" value={formData.gender} onChange={handleChange}>
+                <label>Gender</label>
+                <CustomSelect name="gender" value={formData.gender} onChange={handleChange}>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
                   <option value="other">Other</option>
-                </select>
+                </CustomSelect>
               </div>
             </div>
 
@@ -201,14 +204,14 @@ const ProfileSetup = () => {
             <h2>Fitness Information</h2>
 
             <div className="form-group">
-              <label htmlFor="fitnessLevel">Current Fitness Level</label>
-              <select id="fitnessLevel" name="fitnessLevel" value={formData.fitnessLevel} onChange={handleChange}>
+              <label>Current Fitness Level</label>
+              <CustomSelect name="fitnessLevel" value={formData.fitnessLevel} onChange={handleChange}>
                 {fitnessLevels.map((level) => (
                   <option key={level} value={level}>
                     {level.charAt(0).toUpperCase() + level.slice(1)}
                   </option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
 
             <div className="form-group">

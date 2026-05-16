@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
-import { BarCodeScanner } from 'expo-barcode-scanner';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 const isValidUrl = (url) => {
   try {
@@ -12,16 +12,11 @@ const isValidUrl = (url) => {
 };
 
 const ScannerScreen = ({ navigation }) => {
-  const [hasPermission, setHasPermission] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [message, setMessage] = useState('Point your camera at a QR code containing a website URL.');
 
   useEffect(() => {
-    const requestPermission = async () => {
-      const { status } = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(status === 'granted');
-    };
-
     requestPermission();
   }, []);
 
@@ -37,7 +32,7 @@ const ScannerScreen = ({ navigation }) => {
     setMessage('Scanned code is not a valid web URL. Please scan a QR code with an http or https link.');
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.permissionContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -46,7 +41,7 @@ const ScannerScreen = ({ navigation }) => {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission?.granted) {
     return (
       <View style={styles.permissionContainer}>
         <Text style={styles.permissionText}>Camera access is required to scan QR codes.</Text>
@@ -60,8 +55,9 @@ const ScannerScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.scannerContainer}>
-        <BarCodeScanner
-          onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+        <CameraView
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
           style={StyleSheet.absoluteFillObject}
         />
       </View>

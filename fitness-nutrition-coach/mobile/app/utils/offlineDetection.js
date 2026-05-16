@@ -1,3 +1,4 @@
+import React from 'react';
 import NetInfo from '@react-native-community/netinfo';
 
 class OfflineDetection {
@@ -116,7 +117,8 @@ class OfflineDetection {
 }
 
 // Export singleton instance
-export default new OfflineDetection();
+const offlineDetection = new OfflineDetection();
+export default offlineDetection;
 
 /**
  * Hook for using offline detection in components
@@ -128,11 +130,9 @@ export function useOfflineDetection() {
   const [connectionType, setConnectionType] = React.useState('unknown');
 
   React.useEffect(() => {
-    // Initialize on mount
-    OfflineDetection.initialize();
+    offlineDetection.initialize();
 
-    // Subscribe to changes
-    const unsubscribe = OfflineDetection.subscribe((state) => {
+    const unsubscribe = offlineDetection.subscribe((state) => {
       setIsConnected(state.isConnected);
       setConnectionType(state.type || 'unknown');
     });
