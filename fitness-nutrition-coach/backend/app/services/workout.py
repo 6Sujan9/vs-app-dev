@@ -113,6 +113,25 @@ class WorkoutService:
             (WorkoutPlan.id == workout_id) & (WorkoutPlan.user_id == user_id)
         ).first()
 
+    def update_workout(
+        self,
+        db: Session,
+        user_id: int,
+        workout_id: int,
+        name: str = None,
+        description: str = None,
+    ) -> Optional[WorkoutPlan]:
+        workout = self.get_workout_by_id(db, user_id, workout_id)
+        if not workout:
+            return None
+        if name is not None:
+            workout.name = name
+        if description is not None:
+            workout.description = description
+        db.commit()
+        db.refresh(workout)
+        return workout
+
     def delete_workout(
         self,
         db: Session,

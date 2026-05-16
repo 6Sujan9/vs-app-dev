@@ -98,17 +98,17 @@ class WorkoutPlanResponse(BaseModel):
     """Workout plan response."""
     id: int
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     goal: str
     duration_weeks: int
     frequency: int
-    equipment: List[str]
+    equipment: Optional[List[str]] = []
     intensity: str
-    exercises: List[Dict[str, Any]]
-    tokens_used: int
-    rag_documents_used: Optional[List[str]]
+    exercises: Optional[List[Dict[str, Any]]] = []
+    tokens_used: Optional[int] = 0
+    rag_documents_used: Optional[List[str]] = []
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -147,20 +147,20 @@ class NutritionPlanResponse(BaseModel):
     """Nutrition plan response."""
     id: int
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     goal: str
     duration_days: int
     meals_per_day: int
     daily_calories: int
     diet_type: str
-    protein_grams: float
-    carbs_grams: float
-    fats_grams: float
-    meals: List[Dict[str, Any]]
-    tokens_used: int
-    rag_documents_used: Optional[List[str]]
+    protein_grams: Optional[float] = 0
+    carbs_grams: Optional[float] = 0
+    fats_grams: Optional[float] = 0
+    meals: Optional[List[Dict[str, Any]]] = []
+    tokens_used: Optional[int] = 0
+    rag_documents_used: Optional[List[str]] = []
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

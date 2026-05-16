@@ -1,6 +1,7 @@
 """AI service for Bedrock integration and RAG retrieval."""
 
 import json
+import re
 import boto3
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
@@ -10,15 +11,59 @@ class BedrockService:
     """Service for Amazon Bedrock integration."""
 
     def __init__(self):
-        """Initialize Bedrock client."""
+        """Initialize Bedrock clients."""
         self.client = boto3.client(
             "bedrock-runtime",
             region_name=settings.AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         )
         self.kb_client = boto3.client(
             "bedrock-agent-runtime",
             region_name=settings.AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         )
+
+    def chat_with_coach(
+        self,
+        user_message: str,
+        user_profile: Optional[dict] = None,
+        conversation_history: Optional[List[Dict]] = None,
+    ) -> Dict[str, Any]:
+        """Chat with AI fitness coach, using Knowledge Base when available."""
+        # Try Knowledge Base first
+        if settings.BEDROCK_KNOWLEDGE_BASE_ID:
+            try:
+                response = self.kb_client.retrieve_and_generate(
+                    input={"text": user_message},
+                    retrieveAndGenerateConfiguration={
+                        "type": "KNOWLEDGE_BASE",
+                        "knowledgeBaseConfiguration": {
+                            "knowledgeBaseId": settings.BEDROCK_KNOWLEDGE_BASE_ID,
+                            "modelArn": f"arn:aws:bedrock:{settings.AWS_REGION}::foundation-model/{settings.BEDROCK_MODEL_ID}",
+                        },
+                    },
+                )
+                ai_response = response["output"]["text"]
+                return {
+                    "ai_response": ai_response,
+                    "rag_context": [],
+                    "model": settings.BEDROCK_MODEL_ID,
+                    "tokens_used": len(ai_response) // 4,
+                }
+            except Exception as e:
+                print(f"Bedrock KB unavailable, falling back to direct model: {e}")
+
+        # Fallback: call model directly
+        prompt = self._build_chat_prompt(user_message, user_profile or {}, [], conversation_history)
+        ai_response = self._call_bedrock(prompt)
+        return {
+            "ai_response": ai_response,
+            "rag_context": [],
+            "model": settings.BEDROCK_MODEL_ID,
+            "tokens_used": self._estimate_tokens(prompt + ai_response),
+        }
 
     def generate_workout(
         self,
@@ -30,28 +75,12 @@ class BedrockService:
         intensity: str,
         specific_requirements: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Generate a workout plan using Bedrock.
-        
-        Args:
-            user_profile: User profile data
-            goal: Workout goal
-            duration_weeks: Duration in weeks
-            frequency: Sessions per week
-            equipment: Available equipment
-            intensity: Workout intensity
-            specific_requirements: Any specific requirements
-            
-        Returns:
-            Dict with generated workout and metadata
-        """
-        # Retrieve relevant documents from knowledge base
+        """Generate a workout plan using Bedrock."""
         rag_context = self._retrieve_rag_documents(
             query=f"workout plan for {goal} training {intensity} intensity",
-            limit=3
+            limit=3,
         )
-        
-        # Build prompt
+
         prompt = self._build_workout_prompt(
             user_profile=user_profile,
             goal=goal,
@@ -62,20 +91,18 @@ class BedrockService:
             specific_requirements=specific_requirements,
             rag_context=rag_context,
         )
-        
-        # Call Bedrock
+
         response = self._call_bedrock(prompt)
-        
-        # Parse response
+
         try:
             workout_data = self._parse_workout_response(response)
-        except:
+        except Exception:
             workout_data = {
                 "name": f"{goal.replace('_', ' ').title()} Plan",
                 "description": response,
                 "exercises": [],
             }
-        
+
         return {
             "workout": workout_data,
             "bedrock_response": response,
@@ -94,29 +121,12 @@ class BedrockService:
         preferred_foods: Optional[List[str]] = None,
         avoided_foods: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """
-        Generate a meal plan using Bedrock.
-        
-        Args:
-            user_profile: User profile data
-            goal: Nutrition goal
-            duration_days: Duration in days
-            meals_per_day: Meals per day
-            daily_calories: Target daily calories
-            diet_type: Type of diet
-            preferred_foods: List of preferred foods
-            avoided_foods: List of foods to avoid
-            
-        Returns:
-            Dict with generated meal plan and metadata
-        """
-        # Retrieve relevant documents
+        """Generate a meal plan using Bedrock."""
         rag_context = self._retrieve_rag_documents(
             query=f"{diet_type} meal plan for {goal} {daily_calories} calories",
-            limit=3
+            limit=3,
         )
-        
-        # Build prompt
+
         prompt = self._build_nutrition_prompt(
             user_profile=user_profile,
             goal=goal,
@@ -128,20 +138,18 @@ class BedrockService:
             avoided_foods=avoided_foods,
             rag_context=rag_context,
         )
-        
-        # Call Bedrock
+
         response = self._call_bedrock(prompt)
-        
-        # Parse response
+
         try:
             meal_data = self._parse_nutrition_response(response)
-        except:
+        except Exception:
             meal_data = {
                 "name": f"{diet_type.title()} Meal Plan",
                 "description": response,
                 "meals": [],
             }
-        
+
         return {
             "meal_plan": meal_data,
             "bedrock_response": response,
@@ -149,112 +157,50 @@ class BedrockService:
             "tokens_used": self._estimate_tokens(prompt + response),
         }
 
-    def chat_with_coach(
-        self,
-        user_message: str,
-        user_profile: dict,
-        conversation_history: Optional[List[Dict]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Chat with AI fitness coach.
-        
-        Args:
-            user_message: User's message
-            user_profile: User profile data
-            conversation_history: Previous messages
-            
-        Returns:
-            Dict with AI response and metadata
-        """
-        # Retrieve relevant documents
-        rag_context = self._retrieve_rag_documents(
-            query=user_message,
-            limit=3
-        )
-        
-        # Build prompt
-        prompt = self._build_chat_prompt(
-            user_message=user_message,
-            user_profile=user_profile,
-            rag_context=rag_context,
-            conversation_history=conversation_history,
-        )
-        
-        # Call Bedrock
-        response = self._call_bedrock(prompt)
-        
-        return {
-            "ai_response": response,
-            "rag_context": rag_context,
-            "tokens_used": self._estimate_tokens(prompt + response),
-        }
-
-    def _retrieve_rag_documents(
-        self,
-        query: str,
-        limit: int = 3,
-    ) -> List[str]:
-        """
-        Retrieve relevant documents from knowledge base.
-        
-        Args:
-            query: Search query
-            limit: Max documents to return
-            
-        Returns:
-            List of relevant document excerpts
-        """
+    def _retrieve_rag_documents(self, query: str, limit: int = 3) -> List[str]:
+        """Retrieve relevant documents from knowledge base."""
         if not settings.BEDROCK_KNOWLEDGE_BASE_ID:
             return []
-        
+
         try:
             response = self.kb_client.retrieve(
                 knowledgeBaseId=settings.BEDROCK_KNOWLEDGE_BASE_ID,
+                retrievalQuery={"text": query},
                 retrievalConfiguration={
-                    "vectorSearchConfiguration": {
-                        "numberOfResults": limit,
-                    }
+                    "vectorSearchConfiguration": {"numberOfResults": limit},
                 },
-                text=query,
             )
-            
-            documents = []
-            for result in response.get("retrievalResults", []):
-                documents.append(result.get("content", ""))
-            
-            return documents
+            return [
+                result.get("content", {}).get("text", "")
+                for result in response.get("retrievalResults", [])
+            ]
         except Exception as e:
             print(f"RAG retrieval error: {e}")
             return []
 
     def _call_bedrock(self, prompt: str) -> str:
-        """
-        Call Bedrock API.
-        
-        Args:
-            prompt: Prompt for the model
-            
-        Returns:
-            Model response text
-        """
+        """Call Bedrock model API."""
         try:
-            response = self.client.invoke_model(
-                modelId=settings.BEDROCK_MODEL_ID,
-                body=json.dumps({
+            model_id = settings.BEDROCK_MODEL_ID
+            # Nova models use different request format
+            if "nova" in model_id:
+                body = json.dumps({
+                    "messages": [{"role": "user", "content": [{"text": prompt}]}],
+                    "inferenceConfig": {"maxTokens": 2000},
+                })
+            else:
+                body = json.dumps({
                     "anthropic_version": "bedrock-2023-06-01",
                     "max_tokens": 2000,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt,
-                        }
-                    ],
-                }),
-            )
-            
+                    "messages": [{"role": "user", "content": prompt}],
+                })
+
+            response = self.client.invoke_model(modelId=model_id, body=body)
             response_body = json.loads(response["body"].read())
-            text = response_body.get("content", [{}])[0].get("text", "")
-            return text
+
+            if "nova" in model_id:
+                return response_body.get("output", {}).get("message", {}).get("content", [{}])[0].get("text", "")
+            return response_body.get("content", [{}])[0].get("text", "")
         except Exception as e:
             print(f"Bedrock error: {e}")
             return "Unable to generate content at this time."
@@ -272,8 +218,8 @@ class BedrockService:
     ) -> str:
         """Build workout generation prompt."""
         context_text = "\n".join(rag_context) if rag_context else "No context available"
-        
-        prompt = f"""
+
+        return f"""
 Based on the following fitness knowledge base and user profile, create a personalized {goal.replace('_', ' ')} workout plan.
 
 USER PROFILE:
@@ -293,7 +239,7 @@ REQUIREMENTS:
 KNOWLEDGE BASE CONTEXT:
 {context_text}
 
-Please provide a detailed workout plan in JSON format with the following structure:
+Please provide a detailed workout plan in JSON format:
 {{
     "name": "Plan Name",
     "description": "Brief description",
@@ -302,16 +248,13 @@ Please provide a detailed workout plan in JSON format with the following structu
             "name": "Exercise Name",
             "sets": 3,
             "reps": 10,
-            "duration_minutes": 30,
+            "duration_minutes": null,
             "rest_seconds": 60,
             "notes": "Any tips"
         }}
     ]
 }}
-
-Ensure all exercises match the available equipment and user fitness level.
 """
-        return prompt
 
     def _build_nutrition_prompt(
         self,
@@ -327,8 +270,8 @@ Ensure all exercises match the available equipment and user fitness level.
     ) -> str:
         """Build nutrition generation prompt."""
         context_text = "\n".join(rag_context) if rag_context else "No context available"
-        
-        prompt = f"""
+
+        return f"""
 Based on the following nutrition knowledge base and user profile, create a personalized meal plan.
 
 USER PROFILE:
@@ -350,13 +293,10 @@ REQUIREMENTS:
 KNOWLEDGE BASE CONTEXT:
 {context_text}
 
-Please provide a meal plan in JSON format with the following structure:
+Please provide a meal plan in JSON format:
 {{
     "name": "Plan Name",
     "description": "Brief description",
-    "protein_grams": 150,
-    "carbs_grams": 200,
-    "fats_grams": 65,
     "meals": [
         {{
             "name": "Meal Name",
@@ -368,65 +308,101 @@ Please provide a meal plan in JSON format with the following structure:
         }}
     ]
 }}
-
-Ensure the plan respects all dietary restrictions and preferences.
 """
-        return prompt
 
     def _build_chat_prompt(
         self,
         user_message: str,
         user_profile: dict,
         rag_context: List[str],
-        conversation_history: Optional[List[Dict]],
+        conversation_history: Optional[List[Dict]] = None,
     ) -> str:
         """Build chat prompt."""
-        context_text = "\n".join(rag_context) if rag_context else "No context available"
-        
+        context_text = "\n".join(rag_context) if rag_context else ""
         history_text = ""
         if conversation_history:
-            for msg in conversation_history[-5:]:  # Last 5 messages for context
+            for msg in conversation_history[-5:]:
                 history_text += f"\nUser: {msg.get('user_message', '')}\nAssistant: {msg.get('ai_response', '')}"
-        
-        prompt = f"""
-You are an AI Fitness and Nutrition Coach. Help the user with their fitness and nutrition goals.
+
+        return f"""You are an AI Fitness and Nutrition Coach. Help the user with their fitness and nutrition goals.
 
 USER PROFILE:
 - Age: {user_profile.get('age', 'Unknown')}
 - Weight: {user_profile.get('weight', 'Unknown')} kg
 - Fitness Level: {user_profile.get('fitness_level', 'Unknown')}
 - Goals: {', '.join(user_profile.get('goals', []) or ['Not specified'])}
-
-CONVERSATION HISTORY:{history_text}
-
-KNOWLEDGE BASE CONTEXT:
-{context_text}
-
+{f'CONVERSATION HISTORY:{history_text}' if history_text else ''}
+{f'KNOWLEDGE BASE CONTEXT:{chr(10)}{context_text}' if context_text else ''}
 USER MESSAGE: {user_message}
 
-Please provide helpful, personalized advice based on their profile and the knowledge base. Be encouraging and specific.
-"""
-        return prompt
+Please provide helpful, personalized advice. Be encouraging and specific."""
 
     def _parse_workout_response(self, response: str) -> dict:
         """Parse workout response from Bedrock."""
-        # Try to extract JSON from response
-        import re
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group())
-        return {"description": response}
+            data = json.loads(json_match.group())
+            # Handle wrapped structures
+            if 'workout_plan' in data:
+                data = data['workout_plan']
+            elif 'workout' in data and isinstance(data['workout'], dict):
+                data = data['workout']
+            # Normalize exercises list
+            exercises = data.get('exercises', [])
+            normalized = []
+            for ex in exercises:
+                if isinstance(ex, dict):
+                    normalized.append({
+                        'name': ex.get('name', 'Exercise'),
+                        'sets': ex.get('sets'),
+                        'reps': ex.get('reps'),
+                        'duration_minutes': ex.get('duration_minutes'),
+                        'rest_seconds': ex.get('rest_seconds'),
+                        'notes': ex.get('notes') or ex.get('instructions') or ex.get('description') or '',
+                    })
+            data['exercises'] = normalized
+            return data
+        return {
+            "name": "Generated Workout",
+            "description": "Your workout plan has been generated.",
+            "exercises": [],
+        }
 
     def _parse_nutrition_response(self, response: str) -> dict:
         """Parse nutrition response from Bedrock."""
-        # Try to extract JSON from response
-        import re
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group())
-        return {"description": response}
+            data = json.loads(json_match.group())
+            if 'meal_plan' in data:
+                data = data['meal_plan']
+            elif 'plan' in data and isinstance(data['plan'], dict):
+                data = data['plan']
+            # Normalize meals list
+            meals = data.get('meals', [])
+            normalized = []
+            for meal in meals:
+                if isinstance(meal, dict):
+                    foods = meal.get('foods', meal.get('ingredients', meal.get('items', [])))
+                    if isinstance(foods, str):
+                        foods = [f.strip() for f in foods.split(',')]
+                    normalized.append({
+                        'name': meal.get('name', 'Meal'),
+                        'calories': meal.get('calories'),
+                        'protein_grams': meal.get('protein_grams', meal.get('protein', 0)),
+                        'carbs_grams': meal.get('carbs_grams', meal.get('carbs', 0)),
+                        'fats_grams': meal.get('fats_grams', meal.get('fats', 0)),
+                        'foods': foods,
+                        'time': meal.get('time', ''),
+                        'notes': meal.get('notes', ''),
+                    })
+            data['meals'] = normalized
+            return data
+        return {
+            "name": "Generated Meal Plan",
+            "description": "Your meal plan has been generated.",
+            "meals": [],
+        }
 
     def _estimate_tokens(self, text: str) -> int:
-        """Estimate tokens used (rough approximation)."""
-        # Rough estimate: ~4 characters per token
+        """Estimate tokens (rough approximation: ~4 chars per token)."""
         return len(text) // 4

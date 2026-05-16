@@ -131,6 +131,25 @@ class ProgressService:
         }
 
     @staticmethod
+    def update_progress_log(
+        db: Session,
+        user_id: int,
+        log_id: int,
+        data: dict,
+    ) -> Optional[ProgressLog]:
+        log = db.query(ProgressLog).filter(
+            (ProgressLog.id == log_id) & (ProgressLog.user_id == user_id)
+        ).first()
+        if not log:
+            return None
+        for field, value in data.items():
+            if hasattr(log, field) and value is not None:
+                setattr(log, field, value)
+        db.commit()
+        db.refresh(log)
+        return log
+
+    @staticmethod
     def delete_progress_log(
         db: Session,
         user_id: int,

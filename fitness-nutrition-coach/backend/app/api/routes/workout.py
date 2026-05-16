@@ -143,6 +143,25 @@ async def get_workout(
     return workout
 
 
+@router.patch("/{workout_id}", response_model=WorkoutPlanResponse)
+async def update_workout(
+    workout_id: int,
+    body: dict,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update workout plan name or description."""
+    from fastapi import Body
+    workout = workout_service.update_workout(
+        db, user.id, workout_id,
+        name=body.get("name"),
+        description=body.get("description"),
+    )
+    if not workout:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workout not found")
+    return workout
+
+
 @router.delete("/{workout_id}")
 async def delete_workout(
     workout_id: int,

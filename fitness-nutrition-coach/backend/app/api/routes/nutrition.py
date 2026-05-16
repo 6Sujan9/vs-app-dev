@@ -144,6 +144,24 @@ async def get_nutrition_plan(
     return plan
 
 
+@router.patch("/{plan_id}", response_model=NutritionPlanResponse)
+async def update_nutrition_plan(
+    plan_id: int,
+    body: dict,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update nutrition plan name or description."""
+    plan = nutrition_service.update_nutrition_plan(
+        db, user.id, plan_id,
+        name=body.get("name"),
+        description=body.get("description"),
+    )
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    return plan
+
+
 @router.delete("/{plan_id}")
 async def delete_nutrition_plan(
     plan_id: int,

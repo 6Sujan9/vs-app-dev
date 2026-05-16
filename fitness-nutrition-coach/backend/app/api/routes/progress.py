@@ -116,6 +116,24 @@ async def get_progress_analytics(
     return analytics
 
 
+@router.patch("/{log_id}", response_model=ProgressLogResponse)
+async def update_progress_log(
+    log_id: int,
+    request: ProgressLogRequest,
+    user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a progress log."""
+    data = request.dict(exclude_unset=True)
+    log = ProgressService.update_progress_log(db, user.id, log_id, data)
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Progress log not found"
+        )
+    return log
+
+
 @router.delete("/{log_id}")
 async def delete_progress_log(
     log_id: int,

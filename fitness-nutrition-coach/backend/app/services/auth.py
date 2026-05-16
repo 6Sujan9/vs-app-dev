@@ -88,10 +88,10 @@ class AuthService:
         """
         # Create tokens
         access_token = SecurityService.create_access_token(
-            data={"sub": user.id, "email": user.email}
+            data={"sub": str(user.id), "email": user.email}
         )
         refresh_token = SecurityService.create_refresh_token(
-            data={"sub": user.id, "email": user.email}
+            data={"sub": str(user.id), "email": user.email}
         )
         
         # Prepare user data

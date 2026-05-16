@@ -123,6 +123,25 @@ class NutritionService:
             (NutritionPlan.id == plan_id) & (NutritionPlan.user_id == user_id)
         ).first()
 
+    def update_nutrition_plan(
+        self,
+        db: Session,
+        user_id: int,
+        plan_id: int,
+        name: str = None,
+        description: str = None,
+    ) -> Optional[NutritionPlan]:
+        plan = self.get_nutrition_plan_by_id(db, user_id, plan_id)
+        if not plan:
+            return None
+        if name is not None:
+            plan.name = name
+        if description is not None:
+            plan.description = description
+        db.commit()
+        db.refresh(plan)
+        return plan
+
     def delete_nutrition_plan(
         self,
         db: Session,
