@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { chatAPI } from '../utils/api';
 
 const ChatScreen = () => {
@@ -15,23 +15,22 @@ const ChatScreen = () => {
   const loadChatHistory = async () => {
     try {
       const response = await chatAPI.getChatHistory({ limit: 50 });
-      const formattedMessages = response.messages.map((msg, index) => ({
-        id: index + 1,
-        sender: 'user',
-        text: msg.user_message,
-      })).concat(response.messages.map((msg, index) => ({
-        id: index + response.messages.length + 1,
-        sender: 'coach',
-        text: msg.ai_response,
-      }))).sort((a, b) => a.id - b.id);
-
-      setMessages(formattedMessages);
+      // Backend returns newest first — reverse to get oldest first
+      const reversed = [...(response.messages || [])].reverse();
+      // Interleave: user message then AI response for each exchange
+      const formatted = [];
+      reversed.forEach((msg, i) => {
+        formatted.push({ id: i * 2, sender: 'user', text: msg.user_message });
+        formatted.push({ id: i * 2 + 1, sender: 'coach', text: msg.ai_response });
+      });
+      setMessages(
+        formatted.length > 0
+          ? formatted
+          : [{ id: 0, sender: 'coach', text: "Hello! I'm your AI fitness coach. How can I help you today?" }]
+      );
     } catch (error) {
       console.error('Failed to load chat history:', error);
-      // Set default welcome message if no history
-      setMessages([
-        { id: 1, sender: 'coach', text: 'Hello! I\'m your AI fitness coach. How can I help you today?' },
-      ]);
+      setMessages([{ id: 0, sender: 'coach', text: "Hello! I'm your AI fitness coach. How can I help you today?" }]);
     }
   };
 
@@ -73,7 +72,11 @@ const ChatScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior="padding">
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <ScrollView style={styles.messagesContainer} showsVerticalScrollIndicator={false}>
         {messages.map((message) => (
           <View key={message.id} style={[

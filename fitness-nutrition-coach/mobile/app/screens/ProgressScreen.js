@@ -1,13 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Modal, TextInput,
+  ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { progressAPI } from '../utils/api';
 
+const MOODS = [
+  { label: 'Great', emoji: '💪' },
+  { label: 'Good', emoji: '😊' },
+  { label: 'Okay', emoji: '😐' },
+  { label: 'Tired', emoji: '😴' },
+];
+
 const EMPTY_FORM = {
   weight: '', body_fat_percentage: '', muscle_mass: '',
-  chest: '', waist: '', hips: '', thighs: '', arms: '', notes: '',
+  chest: '', waist: '', hips: '', thighs: '', arms: '',
+  notes: '', mood: '',
 };
 
 const toPayload = (form) => {
@@ -20,21 +28,44 @@ const toPayload = (form) => {
   if (form.hips) p.hips = parseFloat(form.hips);
   if (form.thighs) p.thighs = parseFloat(form.thighs);
   if (form.arms) p.arms = parseFloat(form.arms);
-  if (form.notes.trim()) p.notes = form.notes.trim();
+  // Combine mood + notes into notes field
+  const moodObj = MOODS.find((m) => m.label === form.mood);
+  const moodPrefix = moodObj ? `${moodObj.emoji} ${moodObj.label}` : '';
+  const combined = [moodPrefix, form.notes.trim()].filter(Boolean).join(' — ');
+  if (combined) p.notes = combined;
   return p;
 };
 
-const logToForm = (log) => ({
-  weight: log.weight != null ? String(log.weight) : '',
-  body_fat_percentage: log.body_fat_percentage != null ? String(log.body_fat_percentage) : '',
-  muscle_mass: log.muscle_mass != null ? String(log.muscle_mass) : '',
-  chest: log.chest != null ? String(log.chest) : '',
-  waist: log.waist != null ? String(log.waist) : '',
-  hips: log.hips != null ? String(log.hips) : '',
-  thighs: log.thighs != null ? String(log.thighs) : '',
-  arms: log.arms != null ? String(log.arms) : '',
-  notes: log.notes || '',
-});
+const logToForm = (log) => {
+  // Try to parse mood out of notes prefix
+  let mood = '';
+  let notes = log.notes || '';
+  for (const m of MOODS) {
+    const prefix = `${m.emoji} ${m.label} — `;
+    const prefixNoNote = `${m.emoji} ${m.label}`;
+    if (notes.startsWith(prefix)) {
+      mood = m.label;
+      notes = notes.slice(prefix.length);
+      break;
+    } else if (notes === prefixNoNote) {
+      mood = m.label;
+      notes = '';
+      break;
+    }
+  }
+  return {
+    weight: log.weight != null ? String(log.weight) : '',
+    body_fat_percentage: log.body_fat_percentage != null ? String(log.body_fat_percentage) : '',
+    muscle_mass: log.muscle_mass != null ? String(log.muscle_mass) : '',
+    chest: log.chest != null ? String(log.chest) : '',
+    waist: log.waist != null ? String(log.waist) : '',
+    hips: log.hips != null ? String(log.hips) : '',
+    thighs: log.thighs != null ? String(log.thighs) : '',
+    arms: log.arms != null ? String(log.arms) : '',
+    notes,
+    mood,
+  };
+};
 
 const ProgressScreen = () => {
   const [logs, setLogs] = useState([]);
@@ -42,9 +73,9 @@ const ProgressScreen = () => {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [logMode, setLogMode] = useState('quick'); // 'quick' | 'full'
 
-  // Edit state
-  const [editLog, setEditLog] = useState(null); // the log being edited
+  const [editLog, setEditLog] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
 
@@ -63,8 +94,12 @@ const ProgressScreen = () => {
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const handleLog = async () => {
+    if (!form.weight && logMode === 'quick') {
+      Alert.alert('Required', 'Please enter your weight.');
+      return;
+    }
     const hasAnyValue = Object.entries(form).some(
-      ([key, val]) => key !== 'notes' && val !== ''
+      ([key, val]) => !['notes', 'mood'].includes(key) && val !== ''
     );
     if (!hasAnyValue) {
       Alert.alert('Required', 'Please enter at least one measurement.');
@@ -90,13 +125,6 @@ const ProgressScreen = () => {
   };
 
   const handleEdit = async () => {
-    const hasAnyValue = Object.entries(editForm).some(
-      ([key, val]) => key !== 'notes' && val !== ''
-    );
-    if (!hasAnyValue) {
-      Alert.alert('Required', 'Please enter at least one measurement.');
-      return;
-    }
     setSaving(true);
     try {
       await progressAPI.updateProgress(editLog.id, toPayload(editForm));
@@ -111,10 +139,9 @@ const ProgressScreen = () => {
   };
 
   const handleDelete = (log) => {
-    const dateLabel = formatDate(log.created_at);
     Alert.alert(
       'Delete Entry',
-      `Delete the progress log from ${dateLabel}?`,
+      `Delete the progress log from ${formatDate(log.created_at)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -133,13 +160,12 @@ const ProgressScreen = () => {
   };
 
   const latest = logs[0];
-  const earliest = logs[logs.length - 1];
-  const weightChange = latest?.weight && earliest?.weight && logs.length > 1
-    ? (latest.weight - earliest.weight).toFixed(1)
-    : null;
+  const previous = logs[1]; // entry just before the latest
+  const weightChange = latest?.weight && previous?.weight
+    ? (latest.weight - previous.weight).toFixed(1) : null;
 
   const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
+    const d = new Date(dateStr.replace(' ', 'T'));
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
@@ -148,7 +174,6 @@ const ProgressScreen = () => {
   return (
     <View style={styles.container}>
       <ScrollView>
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Progress</Text>
           <TouchableOpacity style={styles.logBtn} onPress={() => setShowModal(true)}>
@@ -156,13 +181,12 @@ const ProgressScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Summary cards */}
         {latest ? (
           <View style={styles.statsRow}>
             <StatCard label="Current Weight" value={latest.weight ? `${latest.weight} kg` : '—'} icon="⚖️" />
             <StatCard label="Body Fat" value={latest.body_fat_percentage ? `${latest.body_fat_percentage}%` : '—'} icon="📊" />
             <StatCard
-              label="Weight Change"
+              label="Since Last Log"
               value={weightChange !== null ? `${weightChange > 0 ? '+' : ''}${weightChange} kg` : '—'}
               icon="📈"
               valueColor={weightChange < 0 ? '#34C759' : weightChange > 0 ? '#ff3b30' : '#999'}
@@ -170,7 +194,6 @@ const ProgressScreen = () => {
           </View>
         ) : null}
 
-        {/* Measurements from latest */}
         {latest && (latest.chest || latest.waist || latest.arms) ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Latest Measurements</Text>
@@ -185,10 +208,8 @@ const ProgressScreen = () => {
           </View>
         ) : null}
 
-        {/* History */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>History ({logs.length} entries)</Text>
-
           {logs.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyIcon}>📊</Text>
@@ -206,19 +227,13 @@ const ProgressScreen = () => {
                   {log.weight ? <Text style={styles.logWeight}>{log.weight} kg</Text> : null}
                 </View>
                 <View style={styles.logTags}>
-                  {log.body_fat_percentage ? (
-                    <Text style={styles.logTag}>🔥 {log.body_fat_percentage}% fat</Text>
-                  ) : null}
-                  {log.muscle_mass ? (
-                    <Text style={styles.logTag}>💪 {log.muscle_mass} kg muscle</Text>
-                  ) : null}
+                  {log.body_fat_percentage ? <Text style={styles.logTag}>🔥 {log.body_fat_percentage}% fat</Text> : null}
+                  {log.muscle_mass ? <Text style={styles.logTag}>💪 {log.muscle_mass} kg muscle</Text> : null}
                   {log.chest ? <Text style={styles.logTag}>📏 chest {log.chest}cm</Text> : null}
                   {log.waist ? <Text style={styles.logTag}>📏 waist {log.waist}cm</Text> : null}
                   {log.arms ? <Text style={styles.logTag}>📏 arms {log.arms}cm</Text> : null}
                 </View>
                 {log.notes ? <Text style={styles.logNotes}>{log.notes}</Text> : null}
-
-                {/* Edit / Delete actions */}
                 <View style={styles.actions}>
                   <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(log)}>
                     <Text style={styles.editBtnText}>✏️ Edit</Text>
@@ -231,12 +246,12 @@ const ProgressScreen = () => {
             ))
           )}
         </View>
-
         <View style={{ height: 30 }} />
       </ScrollView>
 
       {/* Log Progress Modal */}
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>📊 Log Progress</Text>
@@ -245,22 +260,35 @@ const ProgressScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <ProgressForm form={form} setForm={setForm} />
+          {/* Quick / Full toggle */}
+          <View style={styles.toggle}>
+            <TouchableOpacity
+              style={[styles.toggleBtn, logMode === 'quick' && styles.toggleBtnActive]}
+              onPress={() => setLogMode('quick')}>
+              <Text style={[styles.toggleBtnText, logMode === 'quick' && styles.toggleBtnTextActive]}>⚡ Quick</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, logMode === 'full' && styles.toggleBtnActive]}
+              onPress={() => setLogMode('full')}>
+              <Text style={[styles.toggleBtnText, logMode === 'full' && styles.toggleBtnTextActive]}>📋 Full</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ProgressForm form={form} setForm={setForm} mode={logMode} latest={latest} />
 
           <TouchableOpacity
             style={[styles.saveBtn, saving && { opacity: 0.7 }]}
             onPress={handleLog} disabled={saving}>
-            {saving
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.saveBtnText}>Save Progress</Text>}
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save Progress</Text>}
           </TouchableOpacity>
-
           <View style={{ height: 40 }} />
         </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Progress Modal */}
       <Modal visible={showEditModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>✏️ Edit Progress</Text>
@@ -268,45 +296,79 @@ const ProgressScreen = () => {
               <Text style={styles.closeBtn}>✕</Text>
             </TouchableOpacity>
           </View>
-
-          <ProgressForm form={editForm} setForm={setEditForm} />
-
+          <ProgressForm form={editForm} setForm={setEditForm} mode="full" />
           <TouchableOpacity
             style={[styles.saveBtn, saving && { opacity: 0.7 }]}
             onPress={handleEdit} disabled={saving}>
-            {saving
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.saveBtnText}>Save Changes</Text>}
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Save Changes</Text>}
           </TouchableOpacity>
-
           <View style={{ height: 40 }} />
         </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 };
 
-const ProgressForm = ({ form, setForm }) => {
+const ProgressForm = ({ form, setForm, mode, latest }) => {
   const set = (key) => (v) => setForm((p) => ({ ...p, [key]: v }));
+
+  const hint = (field) => {
+    if (!latest || latest[field] == null) return '';
+    return `Last: ${latest[field]}`;
+  };
+
   return (
     <>
-      <Text style={styles.modalSectionLabel}>Body Composition</Text>
-      <FormRow label="Weight (kg)" placeholder="e.g. 72.5" value={form.weight} onChangeText={set('weight')} />
-      <FormRow label="Body Fat (%)" placeholder="e.g. 18" value={form.body_fat_percentage} onChangeText={set('body_fat_percentage')} />
-      <FormRow label="Muscle Mass (kg)" placeholder="e.g. 55" value={form.muscle_mass} onChangeText={set('muscle_mass')} />
+      {/* Mood selector */}
+      <Text style={styles.sectionLabel}>How are you feeling?</Text>
+      <View style={styles.moodRow}>
+        {MOODS.map((m) => (
+          <TouchableOpacity
+            key={m.label}
+            style={[styles.moodChip, form.mood === m.label && styles.moodChipActive]}
+            onPress={() => setForm((p) => ({ ...p, mood: p.mood === m.label ? '' : m.label }))}>
+            <Text style={styles.moodEmoji}>{m.emoji}</Text>
+            <Text style={[styles.moodLabel, form.mood === m.label && styles.moodLabelActive]}>{m.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-      <Text style={styles.modalSectionLabel}>Measurements (cm)</Text>
-      <FormRow label="Chest" placeholder="e.g. 100" value={form.chest} onChangeText={set('chest')} />
-      <FormRow label="Waist" placeholder="e.g. 80" value={form.waist} onChangeText={set('waist')} />
-      <FormRow label="Hips" placeholder="e.g. 95" value={form.hips} onChangeText={set('hips')} />
-      <FormRow label="Thighs" placeholder="e.g. 55" value={form.thighs} onChangeText={set('thighs')} />
-      <FormRow label="Arms" placeholder="e.g. 35" value={form.arms} onChangeText={set('arms')} />
+      {/* Weight — always shown */}
+      <Text style={styles.sectionLabel}>Weight</Text>
+      <FormRow
+        label="Weight (kg)" placeholder="e.g. 72.5" hint={hint('weight')}
+        value={form.weight} onChangeText={set('weight')} />
 
-      <Text style={styles.label}>Notes (optional)</Text>
+      {/* Full mode — all measurements */}
+      {mode === 'full' && (
+        <>
+          <Text style={styles.sectionLabel}>Body Composition</Text>
+          <FormRow label="Body Fat (%)" placeholder="e.g. 18" hint={hint('body_fat_percentage')}
+            value={form.body_fat_percentage} onChangeText={set('body_fat_percentage')} />
+          <FormRow label="Muscle Mass (kg)" placeholder="e.g. 55" hint={hint('muscle_mass')}
+            value={form.muscle_mass} onChangeText={set('muscle_mass')} />
+
+          <Text style={styles.sectionLabel}>Measurements (cm)</Text>
+          <FormRow label="Chest" placeholder="e.g. 100" hint={hint('chest')}
+            value={form.chest} onChangeText={set('chest')} />
+          <FormRow label="Waist" placeholder="e.g. 80" hint={hint('waist')}
+            value={form.waist} onChangeText={set('waist')} />
+          <FormRow label="Hips" placeholder="e.g. 95" hint={hint('hips')}
+            value={form.hips} onChangeText={set('hips')} />
+          <FormRow label="Thighs" placeholder="e.g. 55" hint={hint('thighs')}
+            value={form.thighs} onChangeText={set('thighs')} />
+          <FormRow label="Arms" placeholder="e.g. 35" hint={hint('arms')}
+            value={form.arms} onChangeText={set('arms')} />
+        </>
+      )}
+
+      {/* Notes */}
+      <Text style={[styles.label, { marginTop: 16 }]}>Notes (optional)</Text>
       <TextInput
-        style={[styles.input, { height: 80 }]}
+        style={[styles.input, { height: 70 }]}
         multiline value={form.notes}
-        placeholder="How are you feeling? Any observations..."
+        placeholder="Any observations..."
         placeholderTextColor="#aaa"
         onChangeText={set('notes')}
       />
@@ -329,9 +391,12 @@ const MeasureRow = ({ label, value }) => (
   </View>
 );
 
-const FormRow = ({ label, placeholder, value, onChangeText }) => (
-  <>
-    <Text style={styles.label}>{label}</Text>
+const FormRow = ({ label, placeholder, hint, value, onChangeText }) => (
+  <View style={styles.formRow}>
+    <View style={styles.formRowHeader}>
+      <Text style={styles.label}>{label}</Text>
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+    </View>
     <TextInput
       style={styles.input}
       keyboardType="decimal-pad"
@@ -340,7 +405,7 @@ const FormRow = ({ label, placeholder, value, onChangeText }) => (
       value={value}
       onChangeText={onChangeText}
     />
-  </>
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -377,12 +442,26 @@ const styles = StyleSheet.create({
   deleteBtn: { flex: 1, backgroundColor: '#fff0f0', borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
   deleteBtnText: { color: '#ff3b30', fontSize: 13, fontWeight: '600' },
   modal: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, marginTop: 10 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 10 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1a1a2e' },
   closeBtn: { fontSize: 20, color: '#666' },
-  modalSectionLabel: { fontSize: 14, fontWeight: '700', color: '#888', marginTop: 20, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  label: { fontWeight: '600', color: '#1a1a2e', marginBottom: 6, marginTop: 12, fontSize: 14 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fafafa', color: '#1a1a2e', marginBottom: 2 },
+  toggle: { flexDirection: 'row', backgroundColor: '#f0f0f0', borderRadius: 12, padding: 4, marginBottom: 20 },
+  toggleBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
+  toggleBtnActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  toggleBtnText: { fontSize: 14, fontWeight: '600', color: '#999' },
+  toggleBtnTextActive: { color: '#FF9500' },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 20, marginBottom: 10 },
+  moodRow: { flexDirection: 'row', gap: 8 },
+  moodChip: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#e8e8e8', backgroundColor: '#fafafa' },
+  moodChipActive: { borderColor: '#FF9500', backgroundColor: '#fff8ee' },
+  moodEmoji: { fontSize: 22, marginBottom: 2 },
+  moodLabel: { fontSize: 11, color: '#888', fontWeight: '600' },
+  moodLabelActive: { color: '#FF9500' },
+  formRow: { marginBottom: 2 },
+  formRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, marginBottom: 6 },
+  label: { fontWeight: '600', color: '#1a1a2e', fontSize: 14 },
+  hint: { fontSize: 12, color: '#aaa' },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fafafa', color: '#1a1a2e' },
   saveBtn: { backgroundColor: '#FF9500', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

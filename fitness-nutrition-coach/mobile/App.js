@@ -5,6 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 
+import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from './app/context/AuthContext';
 
 // Components
@@ -29,6 +30,10 @@ import ProgressScreen from './app/screens/ProgressScreen';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const tabIcon = (name, focusedName) => ({ focused, color, size }) => (
+  <Ionicons name={focused ? focusedName : name} size={size} color={color} />
+);
+
 function HomeTabs() {
   return (
     <Tab.Navigator
@@ -41,32 +46,50 @@ function HomeTabs() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: 'Home', headerTitle: 'Fitness Coach' }}
+        options={{
+          headerTitle: 'Fitness Coach',
+          tabBarIcon: tabIcon('home-outline', 'home'),
+        }}
       />
       <Tab.Screen
         name="Workouts"
         component={WorkoutsScreen}
-        options={{ tabBarLabel: 'Workouts', headerTitle: 'My Workouts' }}
+        options={{
+          headerTitle: 'My Workouts',
+          tabBarIcon: tabIcon('barbell-outline', 'barbell'),
+        }}
       />
       <Tab.Screen
         name="Nutrition"
         component={NutritionScreen}
-        options={{ tabBarLabel: 'Nutrition', headerTitle: 'Nutrition Plans' }}
+        options={{
+          headerTitle: 'Nutrition Plans',
+          tabBarIcon: tabIcon('restaurant-outline', 'restaurant'),
+        }}
       />
       <Tab.Screen
         name="Chat"
         component={ChatScreen}
-        options={{ tabBarLabel: 'Chat', headerTitle: 'AI Coach' }}
+        options={{
+          headerTitle: 'AI Coach',
+          tabBarIcon: tabIcon('chatbubble-outline', 'chatbubble'),
+        }}
       />
       <Tab.Screen
         name="Progress"
         component={ProgressScreen}
-        options={{ tabBarLabel: 'Progress', headerTitle: 'My Progress' }}
+        options={{
+          headerTitle: 'My Progress',
+          tabBarIcon: tabIcon('trending-up-outline', 'trending-up'),
+        }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarLabel: 'Profile', headerTitle: 'My Profile' }}
+        options={{
+          headerTitle: 'My Profile',
+          tabBarIcon: tabIcon('person-outline', 'person'),
+        }}
       />
     </Tab.Navigator>
   );

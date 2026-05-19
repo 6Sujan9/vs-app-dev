@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Modal, TextInput,
+  ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { userAPI } from '../utils/api';
@@ -9,6 +9,7 @@ import { userAPI } from '../utils/api';
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
 const GENDERS = ['male', 'female', 'other'];
 const GOALS = ['muscle_gain', 'weight_loss', 'endurance', 'strength', 'flexibility', 'maintenance'];
+const DIETARY = ['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'keto', 'paleo', 'low-carb', 'high-protein', 'sugar-free', 'nut-free'];
 
 const ProfileScreen = () => {
   const { user, logout } = useAuth();
@@ -23,7 +24,7 @@ const ProfileScreen = () => {
     gender: 'male',
     fitness_level: 'beginner',
     goals: [],
-    dietary_restrictions: '',
+    dietary_restrictions: [],
     medical_conditions: '',
   });
 
@@ -51,7 +52,7 @@ const ProfileScreen = () => {
       gender: profile?.gender || 'male',
       fitness_level: profile?.fitness_level || 'beginner',
       goals: profile?.goals || [],
-      dietary_restrictions: (profile?.dietary_restrictions || []).join(', '),
+      dietary_restrictions: profile?.dietary_restrictions || [],
       medical_conditions: (profile?.medical_conditions || []).join(', '),
     });
     setShowEdit(true);
@@ -76,8 +77,7 @@ const ProfileScreen = () => {
         gender: form.gender,
         fitness_level: form.fitness_level,
         goals: form.goals,
-        dietary_restrictions: form.dietary_restrictions
-          .split(',').map((s) => s.trim()).filter(Boolean),
+        dietary_restrictions: form.dietary_restrictions,
         medical_conditions: form.medical_conditions
           .split(',').map((s) => s.trim()).filter(Boolean),
       };
@@ -189,6 +189,7 @@ const ProfileScreen = () => {
 
       {/* Edit Modal */}
       <Modal visible={showEdit} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Profile</Text>
@@ -251,10 +252,23 @@ const ProfileScreen = () => {
             ))}
           </View>
 
-          <Text style={styles.label}>Dietary Restrictions (comma separated)</Text>
-          <TextInput style={styles.input} value={form.dietary_restrictions}
-            placeholder="e.g. vegetarian, gluten-free" placeholderTextColor="#aaa"
-            onChangeText={(v) => setForm((p) => ({ ...p, dietary_restrictions: v }))} />
+          <Text style={styles.label}>Dietary Restrictions</Text>
+          <View style={styles.chips}>
+            {DIETARY.map((d) => (
+              <TouchableOpacity key={d}
+                style={[styles.chip, form.dietary_restrictions.includes(d) && styles.chipActive]}
+                onPress={() => setForm((p) => ({
+                  ...p,
+                  dietary_restrictions: p.dietary_restrictions.includes(d)
+                    ? p.dietary_restrictions.filter((x) => x !== d)
+                    : [...p.dietary_restrictions, d],
+                }))}>
+                <Text style={[styles.chipText, form.dietary_restrictions.includes(d) && styles.chipTextActive]}>
+                  {d}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text style={styles.label}>Medical Conditions (comma separated)</Text>
           <TextInput style={styles.input} value={form.medical_conditions}
@@ -272,6 +286,7 @@ const ProfileScreen = () => {
 
           <View style={{ height: 40 }} />
         </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

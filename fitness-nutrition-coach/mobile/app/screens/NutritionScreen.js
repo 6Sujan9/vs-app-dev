@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Modal, TextInput,
+  ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { nutritionAPI } from '../utils/api';
 
@@ -15,16 +15,16 @@ const NutritionScreen = () => {
   const [showGenerator, setShowGenerator] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [editDesc, setEditDesc] = useState('');
+  const [editForm, setEditForm] = useState({
+    name: '', description: '', goal: 'weight_loss', diet_type: 'balanced',
+    daily_calories: '2000', meals_per_day: '3', duration_days: '28',
+    preferred_foods: '', avoided_foods: '',
+  });
   const [saving, setSaving] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [form, setForm] = useState({
-    goal: 'weight_loss',
-    avoided_foods: '',
-    diet_type: 'balanced',
-    daily_calories: '2000',
-    meals_per_day: '3',
-    duration_days: '28',
+    goal: 'weight_loss', avoided_foods: '', preferred_foods: '',
+    diet_type: 'balanced', daily_calories: '2000', meals_per_day: '3', duration_days: '28',
   });
 
   const fetchPlans = useCallback(async () => {
@@ -45,9 +45,11 @@ const NutritionScreen = () => {
     setGenerating(true);
     try {
       const avoided = form.avoided_foods.split(',').map((r) => r.trim()).filter(Boolean);
+      const preferred = form.preferred_foods.split(',').map((r) => r.trim()).filter(Boolean);
       await nutritionAPI.generateMealPlan({
         goal: form.goal,
         avoided_foods: avoided,
+        preferred_foods: preferred,
         diet_type: form.diet_type,
         daily_calories: parseInt(form.daily_calories) || 2000,
         meals_per_day: parseInt(form.meals_per_day) || 3,
@@ -64,20 +66,29 @@ const NutritionScreen = () => {
 
   const openEdit = (plan) => {
     setEditTarget(plan);
-    setEditName(plan.name);
-    setEditDesc(plan.description || '');
+    setEditForm({
+      name: plan.name,
+      description: plan.description || '',
+      goal: plan.goal || 'weight_loss',
+      diet_type: plan.diet_type || 'balanced',
+      daily_calories: String(plan.daily_calories || 2000),
+      meals_per_day: String(plan.meals_per_day || 3),
+      duration_days: String(plan.duration_days || 28),
+      preferred_foods: '',
+      avoided_foods: '',
+    });
   };
 
   const handleSaveEdit = async () => {
-    if (!editName.trim()) {
+    if (!editForm.name.trim()) {
       Alert.alert('Error', 'Name cannot be empty');
       return;
     }
     setSaving(true);
     try {
       await nutritionAPI.updateMealPlan(editTarget.id, {
-        name: editName.trim(),
-        description: editDesc.trim(),
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
       });
       setEditTarget(null);
       fetchPlans();
@@ -86,6 +97,41 @@ const NutritionScreen = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleRegenerate = async (planId, form) => {
+    setRegenerating(true);
+    try {
+      await nutritionAPI.generateMealPlan({
+        goal: form.goal,
+        diet_type: form.diet_type,
+        daily_calories: parseInt(form.daily_calories) || 2000,
+        meals_per_day: parseInt(form.meals_per_day) || 3,
+        duration_days: parseInt(form.duration_days) || 28,
+        preferred_foods: form.preferred_foods.split(',').map((r) => r.trim()).filter(Boolean),
+        avoided_foods: form.avoided_foods.split(',').map((r) => r.trim()).filter(Boolean),
+      });
+      await nutritionAPI.deleteMealPlan(planId);
+      setEditTarget(null);
+      fetchPlans();
+    } catch (err) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const confirmRegenerate = () => {
+    const planId = editTarget.id;
+    const snapshot = { ...editForm };
+    Alert.alert(
+      'Regenerate Meal Plan',
+      'This will replace the current meals with new AI-generated content.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Regenerate', style: 'destructive', onPress: () => handleRegenerate(planId, snapshot) },
+      ]
+    );
   };
 
   const handleDelete = (plan) => {
@@ -162,7 +208,9 @@ const NutritionScreen = () => {
                       </View>
                       {meal.time ? <Text style={styles.mealTime}>{meal.time}</Text> : null}
                       {(meal.foods || []).map((food, j) => (
-                        <Text key={j} style={styles.foodItem}>• {food}</Text>
+                        typeof food === 'string'
+                          ? <Text key={j} style={styles.foodItem}>• {food}</Text>
+                          : food?.name ? <Text key={j} style={styles.foodItem}>• {food.name}</Text> : null
                       ))}
                       {meal.notes ? <Text style={styles.mealNotes}>{meal.notes}</Text> : null}
                     </View>
@@ -172,7 +220,7 @@ const NutritionScreen = () => {
 
               <View style={styles.actions}>
                 <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(plan)}>
-                  <Text style={styles.editBtnText}>✏️ Edit</Text>
+                  <Text style={styles.editBtnText}>✏️ Edit / Regenerate</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(plan)}>
                   <Text style={styles.deleteBtnText}>🗑️ Delete</Text>
@@ -183,32 +231,97 @@ const NutritionScreen = () => {
         )}
       </ScrollView>
 
-      {/* Edit Modal */}
+      {/* Edit & Regenerate Modal */}
       <Modal visible={!!editTarget} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modal}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Edit Meal Plan</Text>
             <TouchableOpacity onPress={() => setEditTarget(null)}>
               <Text style={styles.closeBtn}>✕</Text>
             </TouchableOpacity>
           </View>
+
           <Text style={styles.label}>Name</Text>
-          <TextInput style={styles.input} value={editName}
-            onChangeText={setEditName} placeholder="Plan name" />
+          <TextInput style={styles.input} value={editForm.name}
+            onChangeText={(v) => setEditForm((p) => ({ ...p, name: v }))} placeholder="Plan name" />
+
           <Text style={styles.label}>Description (optional)</Text>
-          <TextInput style={[styles.input, { height: 100 }]} multiline
-            value={editDesc} onChangeText={setEditDesc} placeholder="Add a description..." />
-          <TouchableOpacity style={[styles.generateBtn, { marginTop: 20 }]}
-            onPress={handleSaveEdit} disabled={saving}>
+          <TextInput style={[styles.input, { height: 80 }]} multiline
+            value={editForm.description} onChangeText={(v) => setEditForm((p) => ({ ...p, description: v }))}
+            placeholder="Add a description..." />
+
+          <TouchableOpacity style={[styles.saveBtn, { marginTop: 16 }]}
+            onPress={handleSaveEdit} disabled={saving || regenerating}>
             {saving
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.generateBtnText}>Save Changes</Text>}
+              : <Text style={styles.saveBtnText}>Save Name & Description</Text>}
           </TouchableOpacity>
-        </View>
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>🤖 Regenerate with New Settings</Text>
+
+          <Text style={styles.label}>Goal</Text>
+          <View style={styles.chips}>
+            {GOALS.map((g) => (
+              <TouchableOpacity key={g} style={[styles.chip, editForm.goal === g && styles.chipActive]}
+                onPress={() => setEditForm((p) => ({ ...p, goal: g }))}>
+                <Text style={[styles.chipText, editForm.goal === g && styles.chipTextActive]}>
+                  {g.replace(/_/g, ' ')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.label}>Diet Type</Text>
+          <View style={styles.chips}>
+            {DIET_TYPES.map((d) => (
+              <TouchableOpacity key={d} style={[styles.chip, editForm.diet_type === d && styles.chipActive]}
+                onPress={() => setEditForm((p) => ({ ...p, diet_type: d }))}>
+                <Text style={[styles.chipText, editForm.diet_type === d && styles.chipTextActive]}>
+                  {d}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.label}>Daily Calories Target</Text>
+          <TextInput style={styles.input} value={editForm.daily_calories} keyboardType="numeric"
+            onChangeText={(v) => setEditForm((p) => ({ ...p, daily_calories: v }))} />
+
+          <Text style={styles.label}>Meals per Day</Text>
+          <TextInput style={styles.input} value={editForm.meals_per_day} keyboardType="numeric"
+            onChangeText={(v) => setEditForm((p) => ({ ...p, meals_per_day: v }))} />
+
+          <Text style={styles.label}>Duration (days)</Text>
+          <TextInput style={styles.input} value={editForm.duration_days} keyboardType="numeric"
+            onChangeText={(v) => setEditForm((p) => ({ ...p, duration_days: v }))} />
+
+          <Text style={styles.label}>Preferred Foods (optional)</Text>
+          <TextInput style={styles.input} value={editForm.preferred_foods}
+            onChangeText={(v) => setEditForm((p) => ({ ...p, preferred_foods: v }))}
+            placeholder="e.g. chicken, rice, eggs..."
+            placeholderTextColor="#aaa" />
+
+          <Text style={styles.label}>Foods to Avoid (optional)</Text>
+          <TextInput style={styles.input} value={editForm.avoided_foods}
+            onChangeText={(v) => setEditForm((p) => ({ ...p, avoided_foods: v }))}
+            placeholder="e.g. peanuts, dairy, gluten..."
+            placeholderTextColor="#aaa" />
+
+          <TouchableOpacity style={[styles.regenBtn, { marginBottom: 40 }]}
+            onPress={confirmRegenerate} disabled={saving || regenerating}>
+            {regenerating
+              ? <><ActivityIndicator color="#fff" /><Text style={[styles.regenBtnText, { marginLeft: 8 }]}>Generating...</Text></>
+              : <Text style={styles.regenBtnText}>🤖 Regenerate with AI</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* AI Generator Modal */}
       <Modal visible={showGenerator} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView style={styles.modal} keyboardShouldPersistTaps="handled">
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>🤖 AI Nutrition Generator</Text>
@@ -253,10 +366,17 @@ const NutritionScreen = () => {
           <TextInput style={styles.input} value={form.duration_days} keyboardType="numeric"
             onChangeText={(v) => setForm((p) => ({ ...p, duration_days: v }))} />
 
-          <Text style={styles.label}>Foods to Avoid (comma separated)</Text>
+          <Text style={styles.label}>Preferred Foods (optional)</Text>
+          <TextInput style={styles.input} value={form.preferred_foods}
+            onChangeText={(v) => setForm((p) => ({ ...p, preferred_foods: v }))}
+            placeholder="e.g. chicken, rice, eggs..."
+            placeholderTextColor="#aaa" />
+
+          <Text style={styles.label}>Foods to Avoid (optional)</Text>
           <TextInput style={styles.input} value={form.avoided_foods}
             onChangeText={(v) => setForm((p) => ({ ...p, avoided_foods: v }))}
-            placeholder="peanuts, dairy, gluten..." />
+            placeholder="e.g. peanuts, dairy, gluten..."
+            placeholderTextColor="#aaa" />
 
           <TouchableOpacity style={[styles.generateBtn, { marginBottom: 40 }]} onPress={handleGenerate} disabled={generating}>
             {generating
@@ -264,6 +384,7 @@ const NutritionScreen = () => {
               : <Text style={styles.generateBtnText}>Generate with AI</Text>}
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -273,7 +394,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
   title: { fontSize: 22, fontWeight: 'bold', color: '#1a1a2e' },
-  generateBtn: { backgroundColor: '#34C759', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center' },
+  generateBtn: { backgroundColor: '#34C759', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   generateBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   empty: { alignItems: 'center', padding: 40, gap: 12 },
   emptyIcon: { fontSize: 48 },
@@ -306,6 +427,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, marginTop: 10 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1a1a2e' },
   closeBtn: { fontSize: 20, color: '#666' },
+  saveBtn: { backgroundColor: '#34C759', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  divider: { height: 1, backgroundColor: '#e0e0e0', marginVertical: 20 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginBottom: 4 },
+  regenBtn: { backgroundColor: '#FF9500', paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', marginTop: 20 },
+  regenBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   label: { fontWeight: '600', color: '#1a1a2e', marginBottom: 8, marginTop: 12 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#f8f9fa' },

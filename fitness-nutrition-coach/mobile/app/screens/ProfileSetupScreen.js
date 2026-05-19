@@ -9,6 +9,7 @@ import { userAPI } from '../utils/api';
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
 const GENDERS = ['male', 'female', 'other'];
 const GOALS = ['muscle_gain', 'weight_loss', 'endurance', 'strength', 'flexibility', 'maintenance'];
+const DIETARY = ['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'keto', 'paleo', 'low-carb', 'high-protein', 'sugar-free', 'nut-free'];
 
 const ProfileSetupScreen = () => {
   const { completeProfile } = useAuth();
@@ -21,7 +22,7 @@ const ProfileSetupScreen = () => {
     gender: 'male',
     fitness_level: 'beginner',
     goals: [],
-    dietary_restrictions: '',
+    dietary_restrictions: [],
     medical_conditions: '',
   });
 
@@ -56,8 +57,7 @@ const ProfileSetupScreen = () => {
         gender: form.gender,
         fitness_level: form.fitness_level,
         goals: form.goals,
-        dietary_restrictions: form.dietary_restrictions
-          .split(',').map((s) => s.trim()).filter(Boolean),
+        dietary_restrictions: form.dietary_restrictions,
         medical_conditions: form.medical_conditions
           .split(',').map((s) => s.trim()).filter(Boolean),
       };
@@ -152,9 +152,22 @@ const ProfileSetupScreen = () => {
             </View>
 
             <Text style={styles.label}>Dietary Restrictions (optional)</Text>
-            <TextInput style={styles.input} value={form.dietary_restrictions}
-              placeholder="e.g. vegetarian, gluten-free" placeholderTextColor="#aaa"
-              onChangeText={(v) => setForm((p) => ({ ...p, dietary_restrictions: v }))} />
+            <View style={styles.chips}>
+              {DIETARY.map((d) => (
+                <TouchableOpacity key={d}
+                  style={[styles.chip, form.dietary_restrictions.includes(d) && styles.chipActive]}
+                  onPress={() => setForm((p) => ({
+                    ...p,
+                    dietary_restrictions: p.dietary_restrictions.includes(d)
+                      ? p.dietary_restrictions.filter((x) => x !== d)
+                      : [...p.dietary_restrictions, d],
+                  }))}>
+                  <Text style={[styles.chipText, form.dietary_restrictions.includes(d) && styles.chipTextActive]}>
+                    {d}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <Text style={styles.label}>Medical Conditions (optional)</Text>
             <TextInput style={styles.input} value={form.medical_conditions}
