@@ -130,6 +130,11 @@ class NutritionService:
         plan_id: int,
         name: str = None,
         description: str = None,
+        goal: str = None,
+        diet_type: str = None,
+        daily_calories: int = None,
+        meals_per_day: int = None,
+        duration_days: int = None,
     ) -> Optional[NutritionPlan]:
         plan = self.get_nutrition_plan_by_id(db, user_id, plan_id)
         if not plan:
@@ -138,6 +143,16 @@ class NutritionService:
             plan.name = name
         if description is not None:
             plan.description = description
+        if goal is not None:
+            plan.goal = goal
+        if diet_type is not None:
+            plan.diet_type = diet_type
+        if daily_calories is not None:
+            plan.daily_calories = daily_calories
+        if meals_per_day is not None:
+            plan.meals_per_day = meals_per_day
+        if duration_days is not None:
+            plan.duration_days = duration_days
         db.commit()
         db.refresh(plan)
         return plan

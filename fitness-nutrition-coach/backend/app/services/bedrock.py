@@ -42,6 +42,18 @@ class BedrockService:
                         "knowledgeBaseConfiguration": {
                             "knowledgeBaseId": settings.BEDROCK_KNOWLEDGE_BASE_ID,
                             "modelArn": f"arn:aws:bedrock:{settings.AWS_REGION}::foundation-model/{settings.BEDROCK_MODEL_ID}",
+                            "generationConfiguration": {
+                                "promptTemplate": {
+                                    "textPromptTemplate": (
+                                        "You are a fitness and nutrition coach. "
+                                        "Only answer questions about fitness, exercise, nutrition, diet, and health. "
+                                        "If the question is unrelated to these topics, reply with exactly: "
+                                        "'I can only help with fitness and nutrition questions.' "
+                                        "Do not explain or elaborate.\n\n"
+                                        "$search_results$\n\nUser: $query$"
+                                    )
+                                }
+                            },
                         },
                     },
                 )
@@ -324,7 +336,8 @@ Please provide a meal plan in JSON format:
             for msg in conversation_history[-5:]:
                 history_text += f"\nUser: {msg.get('user_message', '')}\nAssistant: {msg.get('ai_response', '')}"
 
-        return f"""You are an AI Fitness and Nutrition Coach. Help the user with their fitness and nutrition goals.
+        return f"""You are a fitness and nutrition coach. Only answer questions about fitness, exercise, nutrition, diet, and health.
+If the question is unrelated to these topics, reply with exactly: "I can only help with fitness and nutrition questions." Do not explain or elaborate.
 
 USER PROFILE:
 - Age: {user_profile.get('age', 'Unknown')}
@@ -335,7 +348,7 @@ USER PROFILE:
 {f'KNOWLEDGE BASE CONTEXT:{chr(10)}{context_text}' if context_text else ''}
 USER MESSAGE: {user_message}
 
-Please provide helpful, personalized advice. Be encouraging and specific."""
+Provide concise, personalized advice. Keep responses short and to the point."""
 
     def _parse_workout_response(self, response: str) -> dict:
         """Parse workout response from Bedrock."""

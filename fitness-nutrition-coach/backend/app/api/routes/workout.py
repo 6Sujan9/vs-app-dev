@@ -156,6 +156,11 @@ async def update_workout(
         db, user.id, workout_id,
         name=body.get("name"),
         description=body.get("description"),
+        goal=body.get("goal"),
+        duration_weeks=body.get("duration_weeks"),
+        frequency=body.get("frequency"),
+        intensity=body.get("intensity"),
+        equipment=body.get("equipment"),
     )
     if not workout:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workout not found")

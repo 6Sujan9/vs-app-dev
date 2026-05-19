@@ -156,6 +156,11 @@ async def update_nutrition_plan(
         db, user.id, plan_id,
         name=body.get("name"),
         description=body.get("description"),
+        goal=body.get("goal"),
+        diet_type=body.get("diet_type"),
+        daily_calories=body.get("daily_calories"),
+        meals_per_day=body.get("meals_per_day"),
+        duration_days=body.get("duration_days"),
     )
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")

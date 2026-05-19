@@ -120,6 +120,11 @@ class WorkoutService:
         workout_id: int,
         name: str = None,
         description: str = None,
+        goal: str = None,
+        duration_weeks: int = None,
+        frequency: int = None,
+        intensity: str = None,
+        equipment: list = None,
     ) -> Optional[WorkoutPlan]:
         workout = self.get_workout_by_id(db, user_id, workout_id)
         if not workout:
@@ -128,6 +133,16 @@ class WorkoutService:
             workout.name = name
         if description is not None:
             workout.description = description
+        if goal is not None:
+            workout.goal = goal
+        if duration_weeks is not None:
+            workout.duration_weeks = duration_weeks
+        if frequency is not None:
+            workout.frequency = frequency
+        if intensity is not None:
+            workout.intensity = intensity
+        if equipment is not None:
+            workout.equipment = equipment
         db.commit()
         db.refresh(workout)
         return workout
