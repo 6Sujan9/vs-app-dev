@@ -14,18 +14,14 @@ class BedrockService:
     """Service for Amazon Bedrock integration."""
 
     def __init__(self):
-        self.client = boto3.client(
-            "bedrock-runtime",
-            region_name=settings.AWS_REGION,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        )
-        self.kb_client = boto3.client(
-            "bedrock-agent-runtime",
-            region_name=settings.AWS_REGION,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        )
+        creds = {}
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            creds = {
+                "aws_access_key_id": settings.AWS_ACCESS_KEY_ID,
+                "aws_secret_access_key": settings.AWS_SECRET_ACCESS_KEY,
+            }
+        self.client = boto3.client("bedrock-runtime", region_name=settings.AWS_REGION, **creds)
+        self.kb_client = boto3.client("bedrock-agent-runtime", region_name=settings.AWS_REGION, **creds)
 
     # ------------------------------------------------------------------ #
     #  Public methods                                                       #

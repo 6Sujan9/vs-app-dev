@@ -83,12 +83,10 @@ async def bedrock_health():
         "kb_id": s.BEDROCK_KNOWLEDGE_BASE_ID or "not set",
     }
     try:
-        client = boto3.client(
-            "bedrock-runtime",
-            region_name=s.AWS_REGION,
-            aws_access_key_id=s.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=s.AWS_SECRET_ACCESS_KEY,
-        )
+        creds = {}
+        if s.AWS_ACCESS_KEY_ID and s.AWS_SECRET_ACCESS_KEY:
+            creds = {"aws_access_key_id": s.AWS_ACCESS_KEY_ID, "aws_secret_access_key": s.AWS_SECRET_ACCESS_KEY}
+        client = boto3.client("bedrock-runtime", region_name=s.AWS_REGION, **creds)
         body = json.dumps({
             "messages": [{"role": "user", "content": [{"text": "say ok"}]}],
             "inferenceConfig": {"maxTokens": 10},
