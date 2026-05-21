@@ -7,6 +7,9 @@ from typing import Optional, List, Dict, Any
 from app.core.config import settings
 
 
+_NOVA_MICRO = "amazon.nova-micro-v1:0"
+
+
 class BedrockService:
     """Service for Amazon Bedrock integration."""
 
@@ -104,11 +107,12 @@ class BedrockService:
             rag_context=rag_context,
         )
 
-        response = self._call_bedrock(prompt)
+        response = self._call_nova(prompt)
 
         try:
             workout_data = self._parse_workout_response(response)
-        except Exception:
+        except Exception as e:
+            print(f"Workout parse error: {e}\nRaw response: {response[:500]}")
             workout_data = {
                 "name": f"{goal.replace('_', ' ').title()} Plan",
                 "description": response,
@@ -151,11 +155,12 @@ class BedrockService:
             rag_context=rag_context,
         )
 
-        response = self._call_bedrock(prompt)
+        response = self._call_nova(prompt)
 
         try:
             meal_data = self._parse_nutrition_response(response)
-        except Exception:
+        except Exception as e:
+            print(f"Nutrition parse error: {e}\nRaw response: {response[:500]}")
             meal_data = {
                 "name": f"{diet_type.title()} Meal Plan",
                 "description": response,
@@ -190,11 +195,20 @@ class BedrockService:
             print(f"RAG retrieval error: {e}")
             return []
 
+    def _call_nova(self, prompt: str, max_tokens: int = 2000) -> str:
+        """Call Nova Micro model — raises on failure so callers see the real error."""
+        body = json.dumps({
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {"maxTokens": max_tokens},
+        })
+        response = self.client.invoke_model(modelId=_NOVA_MICRO, body=body)
+        response_body = json.loads(response["body"].read())
+        return response_body["output"]["message"]["content"][0]["text"]
+
     def _call_bedrock(self, prompt: str) -> str:
-        """Call Bedrock model API."""
+        """Call Bedrock model API (used for chat fallback)."""
         try:
             model_id = settings.BEDROCK_MODEL_ID
-            # Nova models use different request format
             if "nova" in model_id:
                 body = json.dumps({
                     "messages": [{"role": "user", "content": [{"text": prompt}]}],
@@ -206,10 +220,8 @@ class BedrockService:
                     "max_tokens": 2000,
                     "messages": [{"role": "user", "content": prompt}],
                 })
-
             response = self.client.invoke_model(modelId=model_id, body=body)
             response_body = json.loads(response["body"].read())
-
             if "nova" in model_id:
                 return response_body.get("output", {}).get("message", {}).get("content", [{}])[0].get("text", "")
             return response_body.get("content", [{}])[0].get("text", "")
@@ -352,7 +364,8 @@ Provide concise, personalized advice. Keep responses short and to the point."""
 
     def _parse_workout_response(self, response: str) -> dict:
         """Parse workout response from Bedrock."""
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        cleaned = re.sub(r'```(?:json)?\s*', '', response).strip()
+        json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group())
             # Handle wrapped structures
@@ -383,7 +396,8 @@ Provide concise, personalized advice. Keep responses short and to the point."""
 
     def _parse_nutrition_response(self, response: str) -> dict:
         """Parse nutrition response from Bedrock."""
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        cleaned = re.sub(r'```(?:json)?\s*', '', response).strip()
+        json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group())
             if 'meal_plan' in data:
