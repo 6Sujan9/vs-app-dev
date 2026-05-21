@@ -46,7 +46,7 @@ class BedrockService:
                         "type": "KNOWLEDGE_BASE",
                         "knowledgeBaseConfiguration": {
                             "knowledgeBaseId": settings.BEDROCK_KNOWLEDGE_BASE_ID,
-                            "modelArn": f"arn:aws:bedrock:{settings.AWS_REGION}::foundation-model/{settings.BEDROCK_MODEL_ID}",
+                            "modelArn": f"arn:aws:bedrock:{settings.AWS_REGION}::foundation-model/{_NOVA_MICRO}",
                             "generationConfiguration": {
                                 "promptTemplate": {
                                     "textPromptTemplate": (
@@ -66,18 +66,24 @@ class BedrockService:
                 return {
                     "ai_response": ai_response,
                     "rag_context": [],
-                    "model": settings.BEDROCK_MODEL_ID,
+                    "model": _NOVA_MICRO,
                     "tokens_used": len(ai_response) // 4,
                 }
             except Exception as e:
-                print(f"Bedrock KB unavailable, falling back to direct model: {e}")
+                print(f"Bedrock KB unavailable, falling back to direct Nova Micro: {e}")
 
-        prompt = self._build_chat_prompt(user_message, user_profile or {}, [], conversation_history)
-        ai_response = self._call_bedrock(prompt)
+        # Fallback: call Nova Micro directly
+        rag_context = self._retrieve_rag_documents(query=user_message, limit=2)
+        prompt = self._build_chat_prompt(user_message, user_profile or {}, rag_context, conversation_history)
+        try:
+            ai_response = self._call_nova(prompt)
+        except Exception as e:
+            print(f"Nova Micro chat error: {e}")
+            ai_response = "I'm having trouble connecting to the AI service. Please try again in a moment."
         return {
             "ai_response": ai_response,
-            "rag_context": [],
-            "model": settings.BEDROCK_MODEL_ID,
+            "rag_context": rag_context,
+            "model": _NOVA_MICRO,
             "tokens_used": self._estimate_tokens(prompt + ai_response),
         }
 
