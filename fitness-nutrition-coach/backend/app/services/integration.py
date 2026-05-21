@@ -22,10 +22,17 @@ from app.models import WorkoutPlan, NutritionPlan, ChatMessage, User
 from app.schemas import WorkoutGenerateRequest, NutritionGenerateRequest
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s'
-)
+class _RequestIdFormatter(logging.Formatter):
+    def format(self, record):
+        if not hasattr(record, 'request_id'):
+            record.request_id = '-'
+        return super().format(record)
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_RequestIdFormatter(
+    '%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] - %(message)s'
+))
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 logger = logging.getLogger(__name__)
 
 

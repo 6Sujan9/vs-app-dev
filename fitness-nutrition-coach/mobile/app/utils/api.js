@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ⚠️ Change this IP to match your PC's IP address on your current network
-export const API_BASE_URL = 'http://192.168.1.108:8000/api/v1';
+export const API_BASE_URL = 'http://3.26.116.247:8000/api/v1';
 
 // Called by AuthContext to inject the logout function so api.js can trigger it
 let _onSessionExpired = null;
@@ -59,7 +58,7 @@ const makeRequest = async (endpoint, options = {}) => {
     clearTimeout(timeoutId);
     if (err.name === 'AbortError') {
       throw new Error(
-        `Cannot connect to server at ${API_BASE_URL}.\n\nCheck:\n1. Backend is running\n2. Phone and PC on same WiFi\n3. IP address in api.js`
+        `Cannot connect to server at ${API_BASE_URL}.\n\nCheck:\n1. EC2 instance is running\n2. Port 8000 is open in the security group\n3. Backend service is started on EC2`
       );
     }
     throw err;
