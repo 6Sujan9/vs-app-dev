@@ -69,6 +69,39 @@ async def health_check():
         "environment": settings.ENVIRONMENT,
     }
 
+# Bedrock diagnostic endpoint
+@app.get("/health/bedrock")
+async def bedrock_health():
+    """Test Nova Micro connection and return the real error if it fails."""
+    import json, boto3
+    from app.core.config import settings as s
+    result = {
+        "region": s.AWS_REGION,
+        "model": "amazon.nova-micro-v1:0",
+        "has_access_key": bool(s.AWS_ACCESS_KEY_ID),
+        "has_secret_key": bool(s.AWS_SECRET_ACCESS_KEY),
+        "kb_id": s.BEDROCK_KNOWLEDGE_BASE_ID or "not set",
+    }
+    try:
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=s.AWS_REGION,
+            aws_access_key_id=s.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=s.AWS_SECRET_ACCESS_KEY,
+        )
+        body = json.dumps({
+            "messages": [{"role": "user", "content": [{"text": "say ok"}]}],
+            "inferenceConfig": {"maxTokens": 10},
+        })
+        resp = client.invoke_model(modelId="amazon.nova-micro-v1:0", body=body)
+        text = json.loads(resp["body"].read())["output"]["message"]["content"][0]["text"]
+        result["status"] = "ok"
+        result["response"] = text
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+    return result
+
 # Event handlers
 @app.on_event("startup")
 async def startup_event():
