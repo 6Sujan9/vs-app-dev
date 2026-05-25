@@ -6,6 +6,21 @@ import {
 import { nutritionAPI } from '../utils/api';
 
 const GOALS = ['weight_loss', 'muscle_gain', 'maintenance', 'endurance', 'general_health'];
+
+const MacroBar = ({ label, grams, color }) => {
+  if (!grams) return null;
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+        <Text style={{ fontSize: 12, color: '#555', fontWeight: '600' }}>{label}</Text>
+        <Text style={{ fontSize: 12, color: '#888' }}>{Math.round(grams)}g</Text>
+      </View>
+      <View style={{ height: 7, backgroundColor: '#f0f0f0', borderRadius: 4 }}>
+        <View style={{ height: 7, width: `${Math.min(grams / 3, 100)}%`, backgroundColor: color, borderRadius: 4 }} />
+      </View>
+    </View>
+  );
+};
 const DIET_TYPES = ['balanced', 'vegetarian', 'vegan', 'keto', 'paleo', 'mediterranean'];
 
 const NutritionScreen = () => {
@@ -187,10 +202,10 @@ const NutritionScreen = () => {
                   <Text style={styles.description}>{plan.description}</Text>
                 ) : null}
                 {(plan.protein_grams || plan.carbs_grams || plan.fats_grams) ? (
-                  <View style={styles.macros}>
-                    <Text style={styles.macro}>🥩 {Math.round(plan.protein_grams)}g protein</Text>
-                    <Text style={styles.macro}>🍚 {Math.round(plan.carbs_grams)}g carbs</Text>
-                    <Text style={styles.macro}>🥑 {Math.round(plan.fats_grams)}g fats</Text>
+                  <View style={styles.macroSection}>
+                    <MacroBar label="🥩 Protein" grams={plan.protein_grams} color="#FF6B6B" />
+                    <MacroBar label="🍚 Carbs" grams={plan.carbs_grams} color="#FFD93D" />
+                    <MacroBar label="🥑 Fats" grams={plan.fats_grams} color="#6BCB77" />
                   </View>
                 ) : null}
               </TouchableOpacity>
@@ -407,8 +422,7 @@ const styles = StyleSheet.create({
   description: { fontSize: 13, color: '#666', marginTop: 6, fontStyle: 'italic' },
   meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metaTag: { backgroundColor: '#f0fff4', color: '#34C759', fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
-  macros: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  macro: { fontSize: 12, color: '#555', backgroundColor: '#fff8e1', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  macroSection: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f0f0f0' },
   meals: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 12 },
   mealsTitle: { fontWeight: 'bold', color: '#1a1a2e', marginBottom: 8 },
   meal: { backgroundColor: '#f8f9fa', borderRadius: 8, padding: 10, marginBottom: 6 },

@@ -112,8 +112,10 @@ const ProfileScreen = () => {
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.headerCard}>
+        {/* Gradient-like hero header */}
+        <View style={styles.hero}>
+          <View style={styles.heroBlob1} />
+          <View style={styles.heroBlob2} />
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
@@ -124,7 +126,7 @@ const ProfileScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Stats */}
+        {/* Body Stats */}
         {profile && (profile.age || profile.weight || profile.height) ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Body Stats</Text>
@@ -309,20 +311,25 @@ const DetailRow = ({ label, value }) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa' },
-  headerCard: { alignItems: 'center', backgroundColor: '#fff', paddingVertical: 28, paddingHorizontal: 16, marginBottom: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, elevation: 3 },
-  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center', marginBottom: 12, shadowColor: '#007AFF', shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+
+  // Hero header
+  hero: { backgroundColor: '#1a237e', alignItems: 'center', paddingTop: 52, paddingBottom: 32, paddingHorizontal: 20, overflow: 'hidden' },
+  heroBlob1: { position: 'absolute', right: -50, top: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(100,140,255,0.2)' },
+  heroBlob2: { position: 'absolute', left: -40, bottom: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(80,120,255,0.15)' },
+  avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.4)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   avatarText: { fontSize: 34, fontWeight: '700', color: '#fff' },
-  name: { fontSize: 22, fontWeight: '700', color: '#1a1a2e', marginBottom: 4 },
-  email: { fontSize: 13, color: '#999', marginBottom: 14 },
-  editProfileBtn: { backgroundColor: '#007AFF', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  name: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  email: { fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 16 },
+  editProfileBtn: { backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
   editProfileBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  section: { paddingHorizontal: 16, marginBottom: 20 },
+
+  section: { paddingHorizontal: 16, marginBottom: 20, marginTop: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginBottom: 10 },
   infoCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   infoRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
   infoItem: { flex: 1, alignItems: 'center' },
   infoLabel: { fontSize: 12, color: '#999', marginBottom: 4 },
-  infoValue: { fontSize: 22, fontWeight: '700', color: '#007AFF' },
+  infoValue: { fontSize: 22, fontWeight: '700', color: '#1a237e' },
   infoUnit: { fontSize: 12, color: '#666', marginTop: 2 },
   divider: { width: 1, height: 44, backgroundColor: '#f0f0f0' },
   detailCard: { backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
@@ -330,7 +337,7 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 14, color: '#666' },
   detailValue: { fontSize: 14, fontWeight: '600', color: '#1a1a2e', textTransform: 'capitalize', flexShrink: 1, textAlign: 'right' },
   goalTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' },
-  goalTag: { backgroundColor: '#f0f4ff', color: '#007AFF', fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  goalTag: { backgroundColor: '#e8f0ff', color: '#1a237e', fontSize: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
   emptyCard: { backgroundColor: '#fff', borderRadius: 14, padding: 20, alignItems: 'center' },
   emptyText: { color: '#999', fontSize: 14, textAlign: 'center' },
   logoutBtn: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#ff3b30', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
@@ -343,10 +350,10 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#fafafa', marginBottom: 4, color: '#1a1a2e' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#f8f9fa' },
-  chipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  chipActive: { backgroundColor: '#1a237e', borderColor: '#1a237e' },
   chipText: { fontSize: 13, color: '#666' },
   chipTextActive: { color: '#fff', fontWeight: '600' },
-  saveBtn: { backgroundColor: '#007AFF', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
+  saveBtn: { backgroundColor: '#1a237e', borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 });
 

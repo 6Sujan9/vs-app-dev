@@ -6,6 +6,15 @@ import {
 import { workoutAPI } from '../utils/api';
 
 const GOALS = ['muscle_gain', 'weight_loss', 'endurance', 'strength', 'flexibility'];
+
+const GOAL_COLORS = {
+  muscle_gain: '#007AFF',
+  weight_loss: '#34C759',
+  endurance: '#FF9500',
+  strength: '#FF3B30',
+  flexibility: '#AF52DE',
+};
+const goalColor = (goal) => GOAL_COLORS[goal] || '#007AFF';
 const INTENSITIES = ['light', 'moderate', 'high', 'very_high'];
 const EQUIPMENT = ['dumbbells', 'barbell', 'kettlebell', 'resistance bands', 'pull-up bar', 'bench', 'cable machine', 'treadmill', 'bodyweight'];
 
@@ -174,7 +183,7 @@ const WorkoutsScreen = () => {
           </View>
         ) : (
           workouts.map((workout) => (
-            <View key={workout.id} style={styles.card}>
+            <View key={workout.id} style={[styles.card, { borderLeftColor: goalColor(workout.goal), borderLeftWidth: 4 }]}>
               <TouchableOpacity onPress={() => setExpanded(expanded === workout.id ? null : workout.id)}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardTitle}>{workout.name}</Text>

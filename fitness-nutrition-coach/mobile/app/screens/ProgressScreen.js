@@ -67,6 +67,88 @@ const logToForm = (log) => {
   };
 };
 
+const WeightChart = ({ logs }) => {
+  const [chartWidth, setChartWidth] = React.useState(0);
+  const entries = [...logs].filter((l) => l.weight).slice(0, 10).reverse();
+  if (entries.length < 2) return null;
+
+  const CHART_H = 120;
+  const PAD = 20;
+  const weights = entries.map((e) => e.weight);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  const range = maxW - minW || 1;
+
+  const getX = (i) => PAD + (i / (entries.length - 1)) * (chartWidth - PAD * 2);
+  const getY = (w) => PAD + ((maxW - w) / range) * (CHART_H - PAD * 2);
+  const points = chartWidth > 0 ? entries.map((e, i) => ({ x: getX(i), y: getY(e.weight) })) : [];
+
+  const fmt = (d) => {
+    const dt = new Date(String(d).replace(' ', 'T'));
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  return (
+    <View style={{ marginBottom: 20 }}>
+      <View
+        style={{ height: CHART_H, position: 'relative', backgroundColor: '#fff8ee', borderRadius: 12, overflow: 'hidden' }}
+        onLayout={(e) => setChartWidth(e.nativeEvent.layout.width)}
+      >
+        {points.flatMap((pt, i) => {
+          const els = [];
+          if (i < points.length - 1) {
+            const next = points[i + 1];
+            const dx = next.x - pt.x;
+            const dy = next.y - pt.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+            els.push(
+              <View key={`line-${i}`} style={{
+                position: 'absolute',
+                left: (pt.x + next.x) / 2 - len / 2,
+                top: (pt.y + next.y) / 2 - 1,
+                width: len,
+                height: 2,
+                backgroundColor: 'rgba(255,149,0,0.5)',
+                transform: [{ rotate: `${angle}deg` }],
+              }} />
+            );
+          }
+          els.push(
+            <View key={`dot-${i}`} style={{
+              position: 'absolute',
+              left: pt.x - 5,
+              top: pt.y - 5,
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: '#FF9500',
+              zIndex: 2,
+            }} />,
+            <Text key={`val-${i}`} style={{
+              position: 'absolute',
+              left: pt.x - 16,
+              top: pt.y - 18,
+              fontSize: 9,
+              color: '#FF9500',
+              fontWeight: '700',
+              width: 32,
+              textAlign: 'center',
+            }}>{entries[i].weight}</Text>
+          );
+          return els;
+        })}
+      </View>
+      {entries.length > 0 && chartWidth > 0 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, paddingHorizontal: 4 }}>
+          <Text style={{ fontSize: 10, color: '#aaa' }}>{fmt(entries[0].created_at)}</Text>
+          <Text style={{ fontSize: 10, color: '#aaa' }}>{fmt(entries[entries.length - 1].created_at)}</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 const ProgressScreen = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,6 +273,13 @@ const ProgressScreen = () => {
               icon="📈"
               valueColor={weightChange < 0 ? '#34C759' : weightChange > 0 ? '#ff3b30' : '#999'}
             />
+          </View>
+        ) : null}
+
+        {logs.filter((l) => l.weight).length >= 2 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Weight History</Text>
+            <WeightChart logs={logs} />
           </View>
         ) : null}
 
