@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from './app/context/AuthContext';
+import { ThemeProvider, useTheme } from './app/context/ThemeContext';
 
 // Components
 import SplashScreen from './app/components/SplashScreen';
@@ -35,11 +36,33 @@ const tabIcon = (name, focusedName) => ({ focused, color, size }) => (
 );
 
 function HomeTabs() {
+  const { theme } = useTheme();
+  const C = theme.colors;
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: '#999',
+        tabBarActiveTintColor: C.primary,
+        tabBarInactiveTintColor: C.textMuted,
+        tabBarStyle: {
+          backgroundColor: C.tabBar,
+          borderTopColor: C.tabBorder,
+          borderTopWidth: 1,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 4,
+          shadowColor: C.shadow,
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          elevation: 8,
+        },
+        headerStyle: {
+          backgroundColor: C.header,
+          shadowColor: 'transparent',
+          elevation: 0,
+          borderBottomColor: C.border,
+          borderBottomWidth: 1,
+        },
+        headerTitleStyle: { color: C.headerText, fontWeight: '700' },
         headerShown: true,
       }}
     >
@@ -97,11 +120,13 @@ function HomeTabs() {
 
 function RootNavigator() {
   const { user, loading, needsProfileSetup } = useAuth();
+  const { theme } = useTheme();
+  const C = theme.colors;
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={[styles.loadingContainer, { backgroundColor: C.bg }]}>
+        <ActivityIndicator size="large" color={C.primary} />
       </View>
     );
   }
@@ -116,6 +141,21 @@ function RootNavigator() {
         <Stack.Screen name="MainTabs" component={HomeTabs} />
       )}
     </Stack.Navigator>
+  );
+}
+
+function AppInner() {
+  const { theme } = useTheme();
+  const C = theme.colors;
+
+  return (
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
+      <OfflineIndicator />
+      <NavigationContainer>
+        <RootNavigator />
+        <StatusBar style={C.statusBar} />
+      </NavigationContainer>
+    </View>
   );
 }
 
@@ -154,20 +194,16 @@ export default function App() {
 
   return (
     <ErrorBoundary message="The app encountered an error. Please restart the app." onReset={() => {}}>
-      <AuthProvider>
-        <View style={styles.container}>
-          <OfflineIndicator />
-          <NavigationContainer>
-            <RootNavigator />
-            <StatusBar barStyle="dark-content" />
-          </NavigationContainer>
-        </View>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppInner />
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
