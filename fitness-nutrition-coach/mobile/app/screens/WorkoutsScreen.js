@@ -322,6 +322,7 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                 source={getExerciseAnimation(currentEx, phase)}
                 autoPlay
                 loop
+                resizeMode="contain"
                 style={timerStyles.lottieAnim}
               />
               <Animated.View style={[
@@ -449,7 +450,7 @@ const timerStyles = StyleSheet.create({
   setCounter:    { fontSize: 14, fontWeight: '600', marginTop: 8 },
 
   circleWrap:    { alignItems: 'center', marginBottom: 12 },
-  lottieAnim:    { width: 120, height: 120, marginBottom: 4 },
+  lottieAnim:    { width: 150, height: 150, marginBottom: 2, backgroundColor: 'transparent' },
   circle:        { width: 210, height: 210, borderRadius: 105, borderWidth: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   phaseLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 4 },
   timerNum:      { fontSize: 64, fontWeight: '800', color: '#fff', letterSpacing: -2, width: '100%', textAlign: 'center' },
