@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView,
   Platform, Animated, Vibration,
 } from 'react-native';
+import LottieView from 'lottie-react-native';
 import { workoutAPI } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 
@@ -39,6 +40,21 @@ const PHASE_COLORS = {
 const DEFAULT_WORK_SECS = 45;
 const DEFAULT_REST_SECS = 60;
 const READY_SECS        = 3;
+
+const ANIMATIONS = {
+  workout:  require('../../assets/animations/workout.json'),
+  running:  require('../../assets/animations/running.json'),
+  rest:     require('../../assets/animations/rest.json'),
+  complete: require('../../assets/animations/complete.json'),
+};
+
+const getExerciseAnimation = (exercise, phase) => {
+  if (phase === 'rest' || phase === 'ready') return ANIMATIONS.rest;
+  if (phase === 'complete') return ANIMATIONS.complete;
+  const name = (exercise?.name || '').toLowerCase();
+  if (/run|cardio|jog|treadmill|bike|cycl|jump|burpee|hiit|sprint/.test(name)) return ANIMATIONS.running;
+  return ANIMATIONS.workout;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const cleanDesc = (text) => {
@@ -299,8 +315,15 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
               )}
             </View>
 
-            {/* Timer circle */}
+            {/* Timer circle + Lottie */}
             <View style={timerStyles.circleWrap}>
+              <LottieView
+                key={`lottie-${phase}-${exIndex}`}
+                source={getExerciseAnimation(currentEx, phase)}
+                autoPlay
+                loop
+                style={timerStyles.lottieAnim}
+              />
               <Animated.View style={[
                 timerStyles.circle,
                 {
@@ -378,7 +401,12 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
         ) : (
           /* ── Complete screen ── */
           <View style={timerStyles.completeWrap}>
-            <Text style={timerStyles.completeTrophy}>🏆</Text>
+            <LottieView
+              source={ANIMATIONS.complete}
+              autoPlay
+              loop={false}
+              style={timerStyles.lottieComplete}
+            />
             <Text style={timerStyles.completeTitle}>Workout Complete!</Text>
             <Text style={timerStyles.completeSub}>Amazing work, keep it up!</Text>
 
@@ -415,13 +443,14 @@ const timerStyles = StyleSheet.create({
   stopBtn:       { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
   stopBtnText:   { color: '#FF6584', fontWeight: '700', fontSize: 13 },
 
-  exInfo:        { alignItems: 'center', paddingHorizontal: 24, marginBottom: 28 },
+  exInfo:        { alignItems: 'center', paddingHorizontal: 24, marginBottom: 10 },
   exCounter:     { fontSize: 13, fontWeight: '700', letterSpacing: 2, marginBottom: 8 },
   exName:        { fontSize: 26, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 32 },
   setCounter:    { fontSize: 14, fontWeight: '600', marginTop: 8 },
 
-  circleWrap:    { alignItems: 'center', marginBottom: 28 },
-  circle:        { width: 220, height: 220, borderRadius: 110, borderWidth: 10, alignItems: 'center', justifyContent: 'center' },
+  circleWrap:    { alignItems: 'center', marginBottom: 12 },
+  lottieAnim:    { width: 90, height: 90, marginBottom: 6 },
+  circle:        { width: 200, height: 200, borderRadius: 100, borderWidth: 10, alignItems: 'center', justifyContent: 'center' },
   phaseLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 4 },
   timerNum:      { fontSize: 68, fontWeight: '800', color: '#fff', letterSpacing: -2 },
 
@@ -444,7 +473,7 @@ const timerStyles = StyleSheet.create({
   elapsed:       { fontSize: 12, color: '#555', fontWeight: '500' },
 
   completeWrap:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  completeTrophy:{ fontSize: 80, marginBottom: 16 },
+  lottieComplete:{ width: 200, height: 200, marginBottom: 8 },
   completeTitle: { fontSize: 32, fontWeight: '800', color: '#fff', marginBottom: 8 },
   completeSub:   { fontSize: 16, color: '#aaa', marginBottom: 32 },
   summaryCard:   { width: '100%', backgroundColor: '#1A1A1A', borderRadius: 18, padding: 20, marginBottom: 32, gap: 16 },
