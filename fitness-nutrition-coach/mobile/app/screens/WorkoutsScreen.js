@@ -333,7 +333,7 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                 },
               ]}>
                 <Text style={[timerStyles.phaseLabel, { color: phaseColor }]}>{phaseLabel}</Text>
-                <Text style={timerStyles.timerNum}>{fmtTime(timeLeft)}</Text>
+                <Text style={timerStyles.timerNum} numberOfLines={1} adjustsFontSizeToFit>{fmtTime(timeLeft)}</Text>
               </Animated.View>
               <TimerProgress timeLeft={timeLeft} totalTime={totalTime} phaseColor={phaseColor} />
             </View>
@@ -449,10 +449,10 @@ const timerStyles = StyleSheet.create({
   setCounter:    { fontSize: 14, fontWeight: '600', marginTop: 8 },
 
   circleWrap:    { alignItems: 'center', marginBottom: 12 },
-  lottieAnim:    { width: 90, height: 90, marginBottom: 6 },
-  circle:        { width: 200, height: 200, borderRadius: 100, borderWidth: 10, alignItems: 'center', justifyContent: 'center' },
+  lottieAnim:    { width: 120, height: 120, marginBottom: 4 },
+  circle:        { width: 210, height: 210, borderRadius: 105, borderWidth: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   phaseLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 4 },
-  timerNum:      { fontSize: 68, fontWeight: '800', color: '#fff', letterSpacing: -2 },
+  timerNum:      { fontSize: 64, fontWeight: '800', color: '#fff', letterSpacing: -2, width: '100%', textAlign: 'center' },
 
   restInfo:      { alignItems: 'center', marginBottom: 28, paddingHorizontal: 32 },
   upNextLabel:   { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 2, marginBottom: 6 },
