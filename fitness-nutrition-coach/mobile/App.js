@@ -6,6 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './app/context/AuthContext';
 import { ThemeProvider, useTheme } from './app/context/ThemeContext';
 
@@ -38,6 +39,7 @@ const tabIcon = (name, focusedName) => ({ focused, color, size }) => (
 function HomeTabs() {
   const { theme } = useTheme();
   const C = theme.colors;
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -47,9 +49,9 @@ function HomeTabs() {
           backgroundColor: C.tabBar,
           borderTopColor: C.tabBorder,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 4,
+          height: 56 + insets.bottom,
+          paddingBottom: insets.bottom + 4,
+          paddingTop: 6,
           shadowColor: C.shadow,
           shadowOpacity: 0.08,
           shadowRadius: 8,
@@ -193,13 +195,15 @@ export default function App() {
   }
 
   return (
-    <ErrorBoundary message="The app encountered an error. Please restart the app." onReset={() => {}}>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppInner />
-        </AuthProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <ErrorBoundary message="The app encountered an error. Please restart the app." onReset={() => {}}>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppInner />
+          </AuthProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 
