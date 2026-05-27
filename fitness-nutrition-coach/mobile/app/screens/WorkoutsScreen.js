@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView,
-  Platform, Animated, Vibration,
+  Platform, Animated, Vibration, Image,
 } from 'react-native';
 import { workoutAPI } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
@@ -66,6 +66,16 @@ const DIFFICULTY_COLORS = {
   beginner:     '#43D787',
   intermediate: '#FFB347',
   advanced:     '#FF6584',
+};
+
+const EXERCISE_GIFS = {
+  bench: 'https://i.imgur.com/DcQgZ77.gif',
+};
+
+const getExerciseGif = (exerciseName = '') => {
+  const n = exerciseName.toLowerCase();
+  if (/bench|press|chest|pectoral/.test(n)) return EXERCISE_GIFS.bench;
+  return null;
 };
 
 const fetchExerciseData = async (exerciseName) => {
@@ -246,6 +256,7 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
   const [currentGifData, setCurrentGifData] = useState(null);
   const [gifLoading, setGifLoading]         = useState(false);
   const [instrIndex, setInstrIndex]         = useState(0);
+  const [gifImageLoading, setGifImageLoading] = useState(false);
 
   // Pulse animation for the circle
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -484,7 +495,7 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                 : `EXERCISE ${exIndex + 1} / ${exercises.length}`}
             </Text>
 
-            {/* ── WORK phase: exercise info card ── */}
+            {/* ── WORK phase ── */}
             {phase === 'work' && (
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
@@ -495,13 +506,31 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                 </Text>
 
                 <View style={timerStyles.gifWrap}>
-                  <ExerciseInfoCard
-                    exData={currentGifData}
-                    exerciseName={currentEx?.name}
-                    loading={gifLoading}
-                    instrIndex={instrIndex}
-                    phaseColor={phaseColor}
-                  />
+                  {getExerciseGif(currentEx?.name) ? (
+                    <View style={timerStyles.gifImageWrap}>
+                      {gifImageLoading && (
+                        <View style={timerStyles.gifImageLoader}>
+                          <ActivityIndicator color={phaseColor} size="large" />
+                          <Text style={timerStyles.gifLoadingText}>Loading GIF…</Text>
+                        </View>
+                      )}
+                      <Image
+                        source={{ uri: getExerciseGif(currentEx.name) }}
+                        style={[timerStyles.gifImage, { opacity: gifImageLoading ? 0 : 1 }]}
+                        resizeMode="contain"
+                        onLoadStart={() => setGifImageLoading(true)}
+                        onLoad={() => setGifImageLoading(false)}
+                      />
+                    </View>
+                  ) : (
+                    <ExerciseInfoCard
+                      exData={currentGifData}
+                      exerciseName={currentEx?.name}
+                      loading={gifLoading}
+                      instrIndex={instrIndex}
+                      phaseColor={phaseColor}
+                    />
+                  )}
                 </View>
               </>
             )}
@@ -511,17 +540,25 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
 
-                {/* Dimmed info card with REST overlay */}
+                {/* Dimmed display with REST overlay */}
                 <View style={timerStyles.gifWrap}>
                   <View style={{ position: 'relative' }}>
-                    <ExerciseInfoCard
-                      exData={currentGifData}
-                      exerciseName={currentEx?.name}
-                      loading={false}
-                      instrIndex={instrIndex}
-                      phaseColor={phaseColor}
-                      dimmed
-                    />
+                    {getExerciseGif(currentEx?.name) ? (
+                      <Image
+                        source={{ uri: getExerciseGif(currentEx.name) }}
+                        style={[timerStyles.gifImage, { opacity: 0.3 }]}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <ExerciseInfoCard
+                        exData={currentGifData}
+                        exerciseName={currentEx?.name}
+                        loading={false}
+                        instrIndex={instrIndex}
+                        phaseColor={phaseColor}
+                        dimmed
+                      />
+                    )}
                     <View style={timerStyles.restOverlay}>
                       <Text style={[timerStyles.restOverlayText, { color: phaseColor }]}>REST</Text>
                       <Text style={timerStyles.restOverlaySub}>Take a breath</Text>
@@ -693,6 +730,9 @@ const timerStyles = StyleSheet.create({
 
   gifWrap:            { alignItems: 'center', marginBottom: 14 },
   gifLoadingText:     { color: '#555', fontSize: 12, marginTop: 10 },
+  gifImageWrap:       { width: 280, height: 280, borderRadius: 12, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  gifImageLoader:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  gifImage:           { width: 280, height: 280, borderRadius: 12, backgroundColor: '#1a1a1a' },
 
   // Exercise info card
   infoCard:           { width: '92%', borderRadius: 20, backgroundColor: '#161616', borderWidth: 1, alignItems: 'center', padding: 20, gap: 12 },
