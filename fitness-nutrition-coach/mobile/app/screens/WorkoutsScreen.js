@@ -40,25 +40,36 @@ const DEFAULT_WORK_SECS = 45;
 const DEFAULT_REST_SECS = 60;
 const READY_SECS        = 3;
 
-// ─── ExerciseDB API ───────────────────────────────────────────────────────────
-const EXERCISEDB_KEY  = 'f27299b5e7msh65f5be904713ab3p1c1205jsn2142e34d026b';
-const EXERCISEDB_HOST = 'exercisedb.p.rapidapi.com';
+// ─── wger.de API (no key required) ───────────────────────────────────────────
+const getPlaceholderEmoji = (name = '') => {
+  const n = name.toLowerCase();
+  if (/push|press|chest|shoulder|tricep|bench/.test(n)) return '💪';
+  if (/squat|leg|lunge|glute|hamstring|quad/.test(n))   return '🦵';
+  if (/run|cardio|jog|treadmill|bike|cycl|jump|burpee|hiit|sprint/.test(n)) return '🏃';
+  if (/core|abs|plank|crunch|sit.?up/.test(n))          return '🔄';
+  return '🏋️';
+};
 
 const fetchExerciseData = async (exerciseName) => {
   try {
-    const encoded = encodeURIComponent((exerciseName || '').toLowerCase().trim());
-    const res = await fetch(
-      `https://${EXERCISEDB_HOST}/exercises/name/${encoded}?limit=1`,
-      {
-        headers: {
-          'x-rapidapi-key':  EXERCISEDB_KEY,
-          'x-rapidapi-host': EXERCISEDB_HOST,
-        },
-      }
+    const searchRes = await fetch(
+      `https://wger.de/api/v2/exercise/search/?term=${encodeURIComponent(exerciseName)}&language=english&format=json`
     );
-    if (!res.ok) return null;
-    const data = await res.json();
-    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+    const searchData = await searchRes.json();
+
+    if (searchData.suggestions && searchData.suggestions.length > 0) {
+      const exerciseId = searchData.suggestions[0].data.id;
+
+      const imgRes = await fetch(
+        `https://wger.de/api/v2/exerciseimage/?exercise=${exerciseId}&format=json`
+      );
+      const imgData = await imgRes.json();
+
+      if (imgData.results && imgData.results.length > 0) {
+        return imgData.results[0].image;
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -108,8 +119,8 @@ const TimerProgress = ({ timeLeft, totalTime, phaseColor }) => {
   );
 };
 
-// ─── Exercise GIF Display ─────────────────────────────────────────────────────
-const ExerciseGif = ({ gifData, loading, size = 230, dimmed = false }) => {
+// ─── Exercise Image Display ───────────────────────────────────────────────────
+const ExerciseGif = ({ imageUrl, exerciseName, loading, size = 230, dimmed = false }) => {
   const containerStyle = {
     width: size, height: size,
     borderRadius: 20,
@@ -128,11 +139,11 @@ const ExerciseGif = ({ gifData, loading, size = 230, dimmed = false }) => {
     );
   }
 
-  if (gifData?.gifUrl) {
+  if (imageUrl) {
     return (
       <View style={containerStyle}>
         <Image
-          source={{ uri: gifData.gifUrl }}
+          source={{ uri: imageUrl }}
           style={{ width: size, height: size, opacity: dimmed ? 0.45 : 1 }}
           resizeMode="contain"
         />
@@ -142,8 +153,9 @@ const ExerciseGif = ({ gifData, loading, size = 230, dimmed = false }) => {
 
   return (
     <View style={containerStyle}>
-      <Text style={{ fontSize: 60, opacity: dimmed ? 0.4 : 1 }}>🏋️</Text>
-      <Text style={[timerStyles.gifLoadingText, { opacity: dimmed ? 0.4 : 1 }]}>No preview available</Text>
+      <Text style={{ fontSize: 64, opacity: dimmed ? 0.4 : 1 }}>
+        {getPlaceholderEmoji(exerciseName)}
+      </Text>
     </View>
   );
 };
@@ -405,33 +417,20 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
 
-                {/* Muscle + equipment badges */}
-                <View style={timerStyles.badgeRow}>
-                  {currentGifData?.target ? (
-                    <View style={[timerStyles.muscleBadge, { backgroundColor: `${phaseColor}25` }]}>
-                      <Text style={[timerStyles.muscleBadgeText, { color: phaseColor }]}>
-                        💪 {currentGifData.target}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {currentGifData?.equipment ? (
-                    <View style={timerStyles.equipBadge}>
-                      <Text style={timerStyles.equipBadgeText}>
-                        🏋️ {currentGifData.equipment}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
                 {/* Sets × reps */}
                 <Text style={[timerStyles.setsReps, { color: phaseColor }]}>
                   Set {currentSet} of {totalSets}
                   {currentEx?.reps ? `  ·  ${currentEx.reps} reps` : ''}
                 </Text>
 
-                {/* GIF */}
+                {/* Exercise image */}
                 <View style={timerStyles.gifWrap}>
-                  <ExerciseGif gifData={currentGifData} loading={gifLoading} size={230} />
+                  <ExerciseGif
+                    imageUrl={currentGifData}
+                    exerciseName={currentEx?.name}
+                    loading={gifLoading}
+                    size={230}
+                  />
                 </View>
               </>
             )}
@@ -441,10 +440,10 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
 
-                {/* Dimmed GIF with REST overlay */}
+                {/* Dimmed image with REST overlay */}
                 <View style={timerStyles.gifWrap}>
                   <View style={{ position: 'relative' }}>
-                    <ExerciseGif gifData={currentGifData} loading={false} size={230} dimmed />
+                    <ExerciseGif imageUrl={currentGifData} exerciseName={currentEx?.name} loading={false} size={230} dimmed />
                     <View style={timerStyles.restOverlay}>
                       <Text style={[timerStyles.restOverlayText, { color: phaseColor }]}>REST</Text>
                       <Text style={timerStyles.restOverlaySub}>Take a breath</Text>
@@ -458,22 +457,19 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                     <>
                       <Text style={timerStyles.nextExLabel}>NEXT UP</Text>
                       <View style={timerStyles.nextExRow}>
-                        {nextGifData?.gifUrl ? (
+                        {nextGifData ? (
                           <Image
-                            source={{ uri: nextGifData.gifUrl }}
+                            source={{ uri: nextGifData }}
                             style={timerStyles.nextExGif}
                             resizeMode="contain"
                           />
                         ) : (
                           <View style={timerStyles.nextExGifPlaceholder}>
-                            <Text style={{ fontSize: 26 }}>🏋️</Text>
+                            <Text style={{ fontSize: 26 }}>{getPlaceholderEmoji(nextEx?.name)}</Text>
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
                           <Text style={timerStyles.nextExName} numberOfLines={2}>{nextEx.name}</Text>
-                          {nextGifData?.target ? (
-                            <Text style={timerStyles.nextExMuscle}>💪 {nextGifData.target}</Text>
-                          ) : null}
                           <Text style={timerStyles.nextExMeta}>
                             {nextEx.sets} sets{nextEx.reps ? ` · ${nextEx.reps} reps` : ''}
                           </Text>
