@@ -809,6 +809,8 @@ const WorkoutsScreen = () => {
   const [regenerating, setRegenerating] = useState(false);
   const [timerWorkout, setTimerWorkout] = useState(null);
   const [showTimer, setShowTimer]       = useState(false);
+  const [preparing, setPreparing]       = useState(false);
+  const [prepWorkout, setPrepWorkout]   = useState(null);
 
   const [editForm, setEditForm] = useState({
     name: '', description: '', goal: 'muscle_gain', intensity: 'moderate',
@@ -939,12 +941,31 @@ const WorkoutsScreen = () => {
     ]);
   };
 
-  const startTimer = (workout) => {
+  const startTimer = async (workout) => {
     const exs = workout.exercises || [];
     if (exs.length === 0) {
       Alert.alert('No Exercises', 'This workout has no exercises. Generate or add exercises first.');
       return;
     }
+
+    setPrepWorkout(workout);
+    setPreparing(true);
+
+    const gifUrls = exs.map(ex => getExerciseGif(ex.name)).filter(Boolean);
+
+    await Promise.all([
+      // Prefetch all GIFs (max 5 s per URL, swallow errors)
+      Promise.all(gifUrls.map(url =>
+        Promise.race([
+          Image.prefetch(url).catch(() => null),
+          new Promise(r => setTimeout(r, 5000)),
+        ])
+      )),
+      // Always show the preparing screen for at least 1.5 s
+      new Promise(r => setTimeout(r, 1500)),
+    ]);
+
+    setPreparing(false);
     setTimerWorkout(workout);
     setShowTimer(true);
   };
@@ -1062,6 +1083,21 @@ const WorkoutsScreen = () => {
         )}
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* Preparing Modal */}
+      <Modal visible={preparing} animationType="fade" transparent>
+        <View style={styles.prepOverlay}>
+          <View style={styles.prepCard}>
+            <Text style={styles.prepEmoji}>🏋️</Text>
+            <Text style={styles.prepTitle} numberOfLines={2}>{prepWorkout?.name}</Text>
+            <Text style={styles.prepSub}>
+              {prepWorkout?.exercises?.length || 0} exercises
+            </Text>
+            <ActivityIndicator color="#43D787" size="large" style={{ marginTop: 24 }} />
+            <Text style={styles.prepText}>Preparing your workout…</Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* Timer Modal */}
       <WorkoutTimerModal
@@ -1302,6 +1338,13 @@ const styles = StyleSheet.create({
   chipText:           { fontSize: 13 },
   chipTextActive:     { color: '#fff', fontWeight: '600' },
   input:              { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, marginBottom: 4 },
+
+  prepOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', alignItems: 'center', justifyContent: 'center' },
+  prepCard:    { backgroundColor: '#161616', borderRadius: 24, padding: 36, alignItems: 'center', width: '78%', gap: 6 },
+  prepEmoji:   { fontSize: 60, marginBottom: 6 },
+  prepTitle:   { fontSize: 20, fontWeight: '800', color: '#fff', textAlign: 'center' },
+  prepSub:     { fontSize: 14, color: '#555' },
+  prepText:    { fontSize: 13, color: '#444', marginTop: 12, fontStyle: 'italic' },
 });
 
 export default WorkoutsScreen;
