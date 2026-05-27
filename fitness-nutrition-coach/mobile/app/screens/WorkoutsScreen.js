@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView,
-  Platform, Animated, Vibration, Image,
+  Platform, Animated, Vibration,
 } from 'react-native';
 import { workoutAPI } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
@@ -40,14 +40,32 @@ const DEFAULT_WORK_SECS = 45;
 const DEFAULT_REST_SECS = 60;
 const READY_SECS        = 3;
 
-// ─── wger.de API (no key required) ───────────────────────────────────────────
+// ─── ExerciseDB API ───────────────────────────────────────────────────────────
+const getMuscleEmoji = (bodyPart = '', target = '') => {
+  const s = `${bodyPart} ${target}`.toLowerCase();
+  if (/upper arm|bicep|tricep/.test(s))              return '💪';
+  if (/chest|pectoral/.test(s))                      return '🫁';
+  if (/back|lat|trap|rhomboid|spine/.test(s))        return '🔙';
+  if (/shoulder|delt/.test(s))                       return '🏋️';
+  if (/leg|quad|hamstring|glute|calf|adduct/.test(s)) return '🦵';
+  if (/core|abs|abdom|oblique|waist/.test(s))        return '⚡';
+  if (/cardio/.test(s))                              return '🏃';
+  return '🤸';
+};
+
 const getPlaceholderEmoji = (name = '') => {
   const n = name.toLowerCase();
   if (/push|press|chest|shoulder|tricep|bench/.test(n)) return '💪';
   if (/squat|leg|lunge|glute|hamstring|quad/.test(n))   return '🦵';
   if (/run|cardio|jog|treadmill|bike|cycl|jump|burpee|hiit|sprint/.test(n)) return '🏃';
-  if (/core|abs|plank|crunch|sit.?up/.test(n))          return '🔄';
-  return '🏋️';
+  if (/core|abs|plank|crunch|sit.?up/.test(n))          return '⚡';
+  return '🤸';
+};
+
+const DIFFICULTY_COLORS = {
+  beginner:     '#43D787',
+  intermediate: '#FFB347',
+  advanced:     '#FF6584',
 };
 
 const fetchExerciseData = async (exerciseName) => {
@@ -68,7 +86,17 @@ const fetchExerciseData = async (exerciseName) => {
         }
       );
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data[0].gifUrl;
+      if (Array.isArray(data) && data.length > 0) {
+        const ex = data[0];
+        return {
+          name:         ex.name         || '',
+          bodyPart:     ex.bodyPart     || '',
+          target:       ex.target       || '',
+          equipment:    ex.equipment    || '',
+          instructions: Array.isArray(ex.instructions) ? ex.instructions : [],
+          difficulty:   ex.difficulty   || '',
+        };
+      }
       return null;
     } catch { return null; }
   };
@@ -76,15 +104,15 @@ const fetchExerciseData = async (exerciseName) => {
   const clean = cleanName(exerciseName);
   const words = clean.split(' ').filter(Boolean);
 
-  let gif = await search(clean);
-  if (gif) return gif;
+  let result = await search(clean);
+  if (result) return result;
 
   if (words.length > 1) {
-    gif = await search(words.slice(0, 2).join(' '));
-    if (gif) return gif;
+    result = await search(words.slice(0, 2).join(' '));
+    if (result) return result;
   }
 
-  return search(words[0]);
+  return search(words[0] || clean);
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,43 +159,66 @@ const TimerProgress = ({ timeLeft, totalTime, phaseColor }) => {
   );
 };
 
-// ─── Exercise Image Display ───────────────────────────────────────────────────
-const ExerciseGif = ({ imageUrl, exerciseName, loading, size = 230, dimmed = false }) => {
-  const containerStyle = {
-    width: size, height: size,
-    borderRadius: 20,
-    backgroundColor: '#161616',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  };
+// ─── Exercise Info Card ───────────────────────────────────────────────────────
+const ExerciseInfoCard = ({ exData, exerciseName, loading, instrIndex = 0, phaseColor = '#43D787', dimmed = false }) => {
+  const emoji      = exData
+    ? getMuscleEmoji(exData.bodyPart, exData.target)
+    : getPlaceholderEmoji(exerciseName);
+  const diffColor  = DIFFICULTY_COLORS[(exData?.difficulty || '').toLowerCase()] || null;
+  const steps      = exData?.instructions || [];
+  const stepText   = steps.length > 0 ? steps[instrIndex % steps.length] : null;
+  const stepNum    = steps.length > 0 ? (instrIndex % steps.length) + 1 : 0;
 
   if (loading) {
     return (
-      <View style={containerStyle}>
-        <ActivityIndicator color="#43D787" size="large" />
-        <Text style={timerStyles.gifLoadingText}>Loading exercise...</Text>
-      </View>
-    );
-  }
-
-  if (imageUrl) {
-    return (
-      <View style={containerStyle}>
-        <Image
-          source={{ uri: imageUrl }}
-          style={{ width: size, height: size, opacity: dimmed ? 0.45 : 1 }}
-          resizeMode="contain"
-        />
+      <View style={[timerStyles.infoCard, { borderColor: `${phaseColor}30` }]}>
+        <ActivityIndicator color={phaseColor} size="large" />
+        <Text style={timerStyles.gifLoadingText}>Loading exercise info...</Text>
       </View>
     );
   }
 
   return (
-    <View style={containerStyle}>
-      <Text style={{ fontSize: 64, opacity: dimmed ? 0.4 : 1 }}>
-        {getPlaceholderEmoji(exerciseName)}
-      </Text>
+    <View style={[timerStyles.infoCard, { borderColor: `${phaseColor}35`, opacity: dimmed ? 0.4 : 1 }]}>
+      {/* Large muscle emoji */}
+      <Text style={timerStyles.muscleEmoji}>{emoji}</Text>
+
+      {/* Badges */}
+      <View style={timerStyles.infoBadgeRow}>
+        {exData?.target ? (
+          <View style={[timerStyles.targetBadge, { backgroundColor: `${phaseColor}25` }]}>
+            <Text style={[timerStyles.targetBadgeText, { color: phaseColor }]}>
+              {exData.target}
+            </Text>
+          </View>
+        ) : null}
+        {exData?.equipment ? (
+          <View style={timerStyles.equipBadge}>
+            <Text style={timerStyles.equipBadgeText}>{exData.equipment}</Text>
+          </View>
+        ) : null}
+        {diffColor ? (
+          <View style={[timerStyles.diffBadge, { backgroundColor: `${diffColor}22` }]}>
+            <Text style={[timerStyles.diffBadgeText, { color: diffColor }]}>
+              {exData.difficulty}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Instruction step */}
+      {stepText ? (
+        <View style={timerStyles.instrBox}>
+          {steps.length > 1 && (
+            <Text style={timerStyles.instrStep}>STEP {stepNum} / {steps.length}</Text>
+          )}
+          <Text style={timerStyles.instrText}>{stepText}</Text>
+        </View>
+      ) : (
+        <Text style={timerStyles.instrPlaceholder}>
+          {exData ? 'No instructions available' : 'Fetching exercise info…'}
+        </Text>
+      )}
     </View>
   );
 };
@@ -190,10 +241,11 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
   const [totalElapsed, setTotalElapsed] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
 
-  // GIF state
+  // Exercise data state
   const gifCacheRef    = useRef({});
   const [currentGifData, setCurrentGifData] = useState(null);
   const [gifLoading, setGifLoading]         = useState(false);
+  const [instrIndex, setInstrIndex]         = useState(0);
 
   // Pulse animation for the circle
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -243,11 +295,12 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
     return () => stopPulse();
   }, [visible]);
 
-  // Load GIF when exercise index changes
+  // Load exercise data when index changes
   useEffect(() => {
     if (!visible || !exercises[exIndex]) return;
     let cancelled = false;
 
+    setInstrIndex(0);
     setGifLoading(true);
     setCurrentGifData(null);
 
@@ -272,6 +325,13 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
     stopPulse();
     startPulse();
   }, [phase]);
+
+  // Cycle instruction step every 10 s during work phase
+  useEffect(() => {
+    if (phase !== 'work' || isPaused) return;
+    const t = setInterval(() => setInstrIndex(i => i + 1), 10000);
+    return () => clearInterval(t);
+  }, [phase, isPaused, exIndex]);
 
   // Timer tick
   useEffect(() => {
@@ -424,38 +484,44 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                 : `EXERCISE ${exIndex + 1} / ${exercises.length}`}
             </Text>
 
-            {/* ── WORK phase: exercise info + GIF ── */}
+            {/* ── WORK phase: exercise info card ── */}
             {phase === 'work' && (
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
 
-                {/* Sets × reps */}
                 <Text style={[timerStyles.setsReps, { color: phaseColor }]}>
                   Set {currentSet} of {totalSets}
                   {currentEx?.reps ? `  ·  ${currentEx.reps} reps` : ''}
                 </Text>
 
-                {/* Exercise image */}
                 <View style={timerStyles.gifWrap}>
-                  <ExerciseGif
-                    imageUrl={currentGifData}
+                  <ExerciseInfoCard
+                    exData={currentGifData}
                     exerciseName={currentEx?.name}
                     loading={gifLoading}
-                    size={230}
+                    instrIndex={instrIndex}
+                    phaseColor={phaseColor}
                   />
                 </View>
               </>
             )}
 
-            {/* ── REST phase: dimmed GIF + overlay + next preview ── */}
+            {/* ── REST phase: dimmed card + overlay + next preview ── */}
             {phase === 'rest' && (
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
 
-                {/* Dimmed image with REST overlay */}
+                {/* Dimmed info card with REST overlay */}
                 <View style={timerStyles.gifWrap}>
                   <View style={{ position: 'relative' }}>
-                    <ExerciseGif imageUrl={currentGifData} exerciseName={currentEx?.name} loading={false} size={230} dimmed />
+                    <ExerciseInfoCard
+                      exData={currentGifData}
+                      exerciseName={currentEx?.name}
+                      loading={false}
+                      instrIndex={instrIndex}
+                      phaseColor={phaseColor}
+                      dimmed
+                    />
                     <View style={timerStyles.restOverlay}>
                       <Text style={[timerStyles.restOverlayText, { color: phaseColor }]}>REST</Text>
                       <Text style={timerStyles.restOverlaySub}>Take a breath</Text>
@@ -469,19 +535,16 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                     <>
                       <Text style={timerStyles.nextExLabel}>NEXT UP</Text>
                       <View style={timerStyles.nextExRow}>
-                        {nextGifData ? (
-                          <Image
-                            source={{ uri: nextGifData }}
-                            style={timerStyles.nextExGif}
-                            resizeMode="contain"
-                          />
-                        ) : (
-                          <View style={timerStyles.nextExGifPlaceholder}>
-                            <Text style={{ fontSize: 26 }}>{getPlaceholderEmoji(nextEx?.name)}</Text>
-                          </View>
-                        )}
+                        <Text style={timerStyles.nextExEmoji}>
+                          {nextGifData
+                            ? getMuscleEmoji(nextGifData.bodyPart, nextGifData.target)
+                            : getPlaceholderEmoji(nextEx?.name)}
+                        </Text>
                         <View style={{ flex: 1 }}>
                           <Text style={timerStyles.nextExName} numberOfLines={2}>{nextEx.name}</Text>
+                          {nextGifData?.target ? (
+                            <Text style={timerStyles.nextExMuscle}>{nextGifData.target}</Text>
+                          ) : null}
                           <Text style={timerStyles.nextExMeta}>
                             {nextEx.sets} sets{nextEx.reps ? ` · ${nextEx.reps} reps` : ''}
                           </Text>
@@ -628,23 +691,37 @@ const timerStyles = StyleSheet.create({
   equipBadgeText:  { color: '#aaa', fontSize: 12, textTransform: 'capitalize' },
   setsReps:        { fontSize: 14, fontWeight: '700', marginBottom: 10 },
 
-  gifWrap:         { alignItems: 'center', marginBottom: 14 },
-  gifLoadingText:  { color: '#555', fontSize: 12, marginTop: 10 },
+  gifWrap:            { alignItems: 'center', marginBottom: 14 },
+  gifLoadingText:     { color: '#555', fontSize: 12, marginTop: 10 },
 
-  restOverlay:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
-  restOverlayText: { fontSize: 52, fontWeight: '900', letterSpacing: 6, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
-  restOverlaySub:  { fontSize: 14, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 4 },
+  // Exercise info card
+  infoCard:           { width: '92%', borderRadius: 20, backgroundColor: '#161616', borderWidth: 1, alignItems: 'center', padding: 20, gap: 12 },
+  muscleEmoji:        { fontSize: 72 },
+  infoBadgeRow:       { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
+  targetBadge:        { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  targetBadgeText:    { fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },
+  equipBadge:         { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)' },
+  equipBadgeText:     { color: '#aaa', fontSize: 12, textTransform: 'capitalize' },
+  diffBadge:          { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  diffBadgeText:      { fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },
+  instrBox:           { width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 14 },
+  instrStep:          { fontSize: 10, color: '#555', fontWeight: '800', letterSpacing: 2, marginBottom: 8, textAlign: 'center' },
+  instrText:          { fontSize: 13, color: '#ccc', lineHeight: 20, textAlign: 'center' },
+  instrPlaceholder:   { fontSize: 12, color: '#444', textAlign: 'center', fontStyle: 'italic' },
 
-  nextExCard:      { width: '92%', backgroundColor: '#161616', borderRadius: 18, padding: 16, marginBottom: 10 },
-  nextExLabel:     { fontSize: 10, fontWeight: '800', color: '#666', letterSpacing: 2.5, marginBottom: 12 },
-  nextExRow:       { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'center' },
-  nextExGif:       { width: 76, height: 76, borderRadius: 12, backgroundColor: '#222' },
-  nextExGifPlaceholder: { width: 76, height: 76, borderRadius: 12, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' },
-  nextExName:      { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 4 },
-  nextExMuscle:    { fontSize: 12, color: '#5AC8FA', marginBottom: 4, textTransform: 'capitalize' },
-  nextExMeta:      { fontSize: 12, color: '#666' },
-  skipRestBtn:     { paddingHorizontal: 24, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, alignSelf: 'center' },
-  skipRestText:    { fontWeight: '700', fontSize: 14 },
+  restOverlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
+  restOverlayText:    { fontSize: 52, fontWeight: '900', letterSpacing: 6, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
+  restOverlaySub:     { fontSize: 14, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 4 },
+
+  nextExCard:         { width: '92%', backgroundColor: '#161616', borderRadius: 18, padding: 16, marginBottom: 10 },
+  nextExLabel:        { fontSize: 10, fontWeight: '800', color: '#666', letterSpacing: 2.5, marginBottom: 12 },
+  nextExRow:          { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'center' },
+  nextExEmoji:        { fontSize: 40, width: 56, textAlign: 'center' },
+  nextExName:         { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  nextExMuscle:       { fontSize: 12, color: '#5AC8FA', marginBottom: 4, textTransform: 'capitalize' },
+  nextExMeta:         { fontSize: 12, color: '#666' },
+  skipRestBtn:        { paddingHorizontal: 24, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, alignSelf: 'center' },
+  skipRestText:       { fontWeight: '700', fontSize: 14 },
 
   readyWrap:       { alignItems: 'center', marginBottom: 16, gap: 10 },
   readyHint:       { fontSize: 16, fontWeight: '700', textAlign: 'center' },
