@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView,
-  Platform, Animated, Vibration, Image,
+  Platform, Animated, Vibration,
 } from 'react-native';
 import { workoutAPI } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
@@ -68,15 +68,6 @@ const DIFFICULTY_COLORS = {
   advanced:     '#FF6584',
 };
 
-const EXERCISE_GIFS = {
-  bench: 'https://i.imgur.com/DcQgZ77.gif',
-};
-
-const getExerciseGif = (exerciseName = '') => {
-  const n = exerciseName.toLowerCase();
-  if (/bench|press|chest|pectoral/.test(n)) return EXERCISE_GIFS.bench;
-  return null;
-};
 
 const fetchExerciseData = async (exerciseName) => {
   const cleanName = (name) => name
@@ -171,56 +162,76 @@ const TimerProgress = ({ timeLeft, totalTime, phaseColor }) => {
 
 // ─── Exercise Info Card ───────────────────────────────────────────────────────
 const ExerciseInfoCard = ({ exData, exerciseName, loading, instrIndex = 0, phaseColor = '#43D787', dimmed = false }) => {
-  const emoji      = exData
+  const emoji     = exData
     ? getMuscleEmoji(exData.bodyPart, exData.target)
     : getPlaceholderEmoji(exerciseName);
-  const diffColor  = DIFFICULTY_COLORS[(exData?.difficulty || '').toLowerCase()] || null;
-  const steps      = exData?.instructions || [];
-  const stepText   = steps.length > 0 ? steps[instrIndex % steps.length] : null;
-  const stepNum    = steps.length > 0 ? (instrIndex % steps.length) + 1 : 0;
+  const diffColor = DIFFICULTY_COLORS[(exData?.difficulty || '').toLowerCase()] || null;
+  const steps     = exData?.instructions || [];
+  const stepText  = steps.length > 0 ? steps[instrIndex % steps.length] : null;
+  const stepNum   = steps.length > 0 ? (instrIndex % steps.length) + 1 : 0;
+
+  const emojiScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(emojiScale, { toValue: 1.14, duration: 900, useNativeDriver: true }),
+        Animated.timing(emojiScale, { toValue: 1.0,  duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
 
   if (loading) {
     return (
-      <View style={[timerStyles.infoCard, { borderColor: `${phaseColor}30` }]}>
+      <View style={[timerStyles.infoCard, { borderColor: `${phaseColor}30`, opacity: dimmed ? 0.4 : 1 }]}>
         <ActivityIndicator color={phaseColor} size="large" />
-        <Text style={timerStyles.gifLoadingText}>Loading exercise info...</Text>
+        <Text style={timerStyles.infoLoadingText}>Loading exercise info…</Text>
       </View>
     );
   }
 
   return (
-    <View style={[timerStyles.infoCard, { borderColor: `${phaseColor}35`, opacity: dimmed ? 0.4 : 1 }]}>
-      {/* Large muscle emoji */}
-      <Text style={timerStyles.muscleEmoji}>{emoji}</Text>
+    <View style={[timerStyles.infoCard, { borderColor: `${phaseColor}40`, opacity: dimmed ? 0.4 : 1 }]}>
+      {/* Pulsing muscle emoji */}
+      <Animated.Text style={[timerStyles.muscleEmoji, { transform: [{ scale: emojiScale }] }]}>
+        {emoji}
+      </Animated.Text>
 
       {/* Badges */}
       <View style={timerStyles.infoBadgeRow}>
         {exData?.target ? (
-          <View style={[timerStyles.targetBadge, { backgroundColor: `${phaseColor}25` }]}>
+          <View style={[timerStyles.targetBadge, { backgroundColor: `${phaseColor}20` }]}>
             <Text style={[timerStyles.targetBadgeText, { color: phaseColor }]}>
-              {exData.target}
+              💪 {exData.target}
             </Text>
           </View>
         ) : null}
         {exData?.equipment ? (
           <View style={timerStyles.equipBadge}>
-            <Text style={timerStyles.equipBadgeText}>{exData.equipment}</Text>
+            <Text style={timerStyles.equipBadgeText}>🔧 {exData.equipment}</Text>
           </View>
         ) : null}
         {diffColor ? (
-          <View style={[timerStyles.diffBadge, { backgroundColor: `${diffColor}22` }]}>
+          <View style={[timerStyles.diffBadge, { backgroundColor: `${diffColor}20` }]}>
             <Text style={[timerStyles.diffBadgeText, { color: diffColor }]}>
-              {exData.difficulty}
+              ★ {exData.difficulty}
             </Text>
           </View>
         ) : null}
       </View>
 
+      {/* Divider */}
+      <View style={timerStyles.instrDivider} />
+
       {/* Instruction step */}
       {stepText ? (
         <View style={timerStyles.instrBox}>
           {steps.length > 1 && (
-            <Text style={timerStyles.instrStep}>STEP {stepNum} / {steps.length}</Text>
+            <View style={timerStyles.instrStepRow}>
+              <Text style={timerStyles.instrStepNum}>STEP {stepNum}</Text>
+              <Text style={timerStyles.instrStepOf}>/ {steps.length}</Text>
+            </View>
           )}
           <Text style={timerStyles.instrText}>{stepText}</Text>
         </View>
@@ -256,7 +267,6 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
   const [currentGifData, setCurrentGifData] = useState(null);
   const [gifLoading, setGifLoading]         = useState(false);
   const [instrIndex, setInstrIndex]         = useState(0);
-  const [gifImageLoading, setGifImageLoading] = useState(false);
 
   // Pulse animation for the circle
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -505,32 +515,14 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                   {currentEx?.reps ? `  ·  ${currentEx.reps} reps` : ''}
                 </Text>
 
-                <View style={timerStyles.gifWrap}>
-                  {getExerciseGif(currentEx?.name) ? (
-                    <View style={timerStyles.gifImageWrap}>
-                      {gifImageLoading && (
-                        <View style={timerStyles.gifImageLoader}>
-                          <ActivityIndicator color={phaseColor} size="large" />
-                          <Text style={timerStyles.gifLoadingText}>Loading GIF…</Text>
-                        </View>
-                      )}
-                      <Image
-                        source={{ uri: getExerciseGif(currentEx.name) }}
-                        style={[timerStyles.gifImage, { opacity: gifImageLoading ? 0 : 1 }]}
-                        resizeMode="contain"
-                        onLoadStart={() => setGifImageLoading(true)}
-                        onLoad={() => setGifImageLoading(false)}
-                      />
-                    </View>
-                  ) : (
-                    <ExerciseInfoCard
-                      exData={currentGifData}
-                      exerciseName={currentEx?.name}
-                      loading={gifLoading}
-                      instrIndex={instrIndex}
-                      phaseColor={phaseColor}
-                    />
-                  )}
+                <View style={timerStyles.cardWrap}>
+                  <ExerciseInfoCard
+                    exData={currentGifData}
+                    exerciseName={currentEx?.name}
+                    loading={gifLoading}
+                    instrIndex={instrIndex}
+                    phaseColor={phaseColor}
+                  />
                 </View>
               </>
             )}
@@ -540,25 +532,17 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
               <>
                 <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
 
-                {/* Dimmed display with REST overlay */}
-                <View style={timerStyles.gifWrap}>
-                  <View style={{ position: 'relative' }}>
-                    {getExerciseGif(currentEx?.name) ? (
-                      <Image
-                        source={{ uri: getExerciseGif(currentEx.name) }}
-                        style={[timerStyles.gifImage, { opacity: 0.3 }]}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <ExerciseInfoCard
-                        exData={currentGifData}
-                        exerciseName={currentEx?.name}
-                        loading={false}
-                        instrIndex={instrIndex}
-                        phaseColor={phaseColor}
-                        dimmed
-                      />
-                    )}
+                {/* Dimmed card with REST overlay */}
+                <View style={timerStyles.cardWrap}>
+                  <View style={{ position: 'relative', width: '100%' }}>
+                    <ExerciseInfoCard
+                      exData={currentGifData}
+                      exerciseName={currentEx?.name}
+                      loading={false}
+                      instrIndex={instrIndex}
+                      phaseColor={phaseColor}
+                      dimmed
+                    />
                     <View style={timerStyles.restOverlay}>
                       <Text style={[timerStyles.restOverlayText, { color: phaseColor }]}>REST</Text>
                       <Text style={timerStyles.restOverlaySub}>Take a breath</Text>
@@ -721,35 +705,30 @@ const timerStyles = StyleSheet.create({
   exCounter:       { fontSize: 11, fontWeight: '800', letterSpacing: 2.5, marginBottom: 6 },
   exName:          { fontSize: 22, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 28, paddingHorizontal: 12, marginBottom: 8 },
 
-  badgeRow:        { flexDirection: 'row', gap: 8, marginBottom: 6, flexWrap: 'wrap', justifyContent: 'center' },
-  muscleBadge:     { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
-  muscleBadgeText: { fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },
-  equipBadge:      { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)' },
-  equipBadgeText:  { color: '#aaa', fontSize: 12, textTransform: 'capitalize' },
   setsReps:        { fontSize: 14, fontWeight: '700', marginBottom: 10 },
 
-  gifWrap:            { alignItems: 'center', marginBottom: 14 },
-  gifLoadingText:     { color: '#555', fontSize: 12, marginTop: 10 },
-  gifImageWrap:       { width: 280, height: 280, borderRadius: 12, backgroundColor: '#1a1a1a', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  gifImageLoader:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  gifImage:           { width: 280, height: 280, borderRadius: 12, backgroundColor: '#1a1a1a' },
+  cardWrap:           { width: '100%', alignItems: 'center', marginBottom: 14 },
 
   // Exercise info card
-  infoCard:           { width: '92%', borderRadius: 20, backgroundColor: '#161616', borderWidth: 1, alignItems: 'center', padding: 20, gap: 12 },
-  muscleEmoji:        { fontSize: 72 },
+  infoCard:           { width: '92%', borderRadius: 24, backgroundColor: '#0f0f0f', borderWidth: 1, alignItems: 'center', padding: 24, gap: 14 },
+  muscleEmoji:        { fontSize: 80 },
+  infoLoadingText:    { color: '#444', fontSize: 13, marginTop: 10 },
   infoBadgeRow:       { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
-  targetBadge:        { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  targetBadge:        { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20 },
   targetBadgeText:    { fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },
-  equipBadge:         { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)' },
-  equipBadgeText:     { color: '#aaa', fontSize: 12, textTransform: 'capitalize' },
-  diffBadge:          { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  equipBadge:         { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)' },
+  equipBadgeText:     { color: '#777', fontSize: 12, textTransform: 'capitalize' },
+  diffBadge:          { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20 },
   diffBadgeText:      { fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },
-  instrBox:           { width: '100%', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 14 },
-  instrStep:          { fontSize: 10, color: '#555', fontWeight: '800', letterSpacing: 2, marginBottom: 8, textAlign: 'center' },
-  instrText:          { fontSize: 13, color: '#ccc', lineHeight: 20, textAlign: 'center' },
-  instrPlaceholder:   { fontSize: 12, color: '#444', textAlign: 'center', fontStyle: 'italic' },
+  instrDivider:       { width: '100%', height: 1, backgroundColor: 'rgba(255,255,255,0.06)' },
+  instrBox:           { width: '100%', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 16, padding: 16 },
+  instrStepRow:       { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginBottom: 10, justifyContent: 'center' },
+  instrStepNum:       { fontSize: 11, color: '#555', fontWeight: '800', letterSpacing: 2 },
+  instrStepOf:        { fontSize: 11, color: '#333', fontWeight: '600' },
+  instrText:          { fontSize: 14, color: '#bbb', lineHeight: 22, textAlign: 'center' },
+  instrPlaceholder:   { fontSize: 12, color: '#333', textAlign: 'center', fontStyle: 'italic' },
 
-  restOverlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.55)' },
+  restOverlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.62)' },
   restOverlayText:    { fontSize: 52, fontWeight: '900', letterSpacing: 6, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
   restOverlaySub:     { fontSize: 14, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 4 },
 
@@ -809,8 +788,6 @@ const WorkoutsScreen = () => {
   const [regenerating, setRegenerating] = useState(false);
   const [timerWorkout, setTimerWorkout] = useState(null);
   const [showTimer, setShowTimer]       = useState(false);
-  const [preparing, setPreparing]       = useState(false);
-  const [prepWorkout, setPrepWorkout]   = useState(null);
 
   const [editForm, setEditForm] = useState({
     name: '', description: '', goal: 'muscle_gain', intensity: 'moderate',
@@ -941,31 +918,12 @@ const WorkoutsScreen = () => {
     ]);
   };
 
-  const startTimer = async (workout) => {
+  const startTimer = (workout) => {
     const exs = workout.exercises || [];
     if (exs.length === 0) {
       Alert.alert('No Exercises', 'This workout has no exercises. Generate or add exercises first.');
       return;
     }
-
-    setPrepWorkout(workout);
-    setPreparing(true);
-
-    const gifUrls = exs.map(ex => getExerciseGif(ex.name)).filter(Boolean);
-
-    await Promise.all([
-      // Prefetch all GIFs (max 5 s per URL, swallow errors)
-      Promise.all(gifUrls.map(url =>
-        Promise.race([
-          Image.prefetch(url).catch(() => null),
-          new Promise(r => setTimeout(r, 5000)),
-        ])
-      )),
-      // Always show the preparing screen for at least 1.5 s
-      new Promise(r => setTimeout(r, 1500)),
-    ]);
-
-    setPreparing(false);
     setTimerWorkout(workout);
     setShowTimer(true);
   };
@@ -1083,21 +1041,6 @@ const WorkoutsScreen = () => {
         )}
         <View style={{ height: 20 }} />
       </ScrollView>
-
-      {/* Preparing Modal */}
-      <Modal visible={preparing} animationType="fade" transparent>
-        <View style={styles.prepOverlay}>
-          <View style={styles.prepCard}>
-            <Text style={styles.prepEmoji}>🏋️</Text>
-            <Text style={styles.prepTitle} numberOfLines={2}>{prepWorkout?.name}</Text>
-            <Text style={styles.prepSub}>
-              {prepWorkout?.exercises?.length || 0} exercises
-            </Text>
-            <ActivityIndicator color="#43D787" size="large" style={{ marginTop: 24 }} />
-            <Text style={styles.prepText}>Preparing your workout…</Text>
-          </View>
-        </View>
-      </Modal>
 
       {/* Timer Modal */}
       <WorkoutTimerModal
@@ -1338,13 +1281,6 @@ const styles = StyleSheet.create({
   chipText:           { fontSize: 13 },
   chipTextActive:     { color: '#fff', fontWeight: '600' },
   input:              { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 15, marginBottom: 4 },
-
-  prepOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', alignItems: 'center', justifyContent: 'center' },
-  prepCard:    { backgroundColor: '#161616', borderRadius: 24, padding: 36, alignItems: 'center', width: '78%', gap: 6 },
-  prepEmoji:   { fontSize: 60, marginBottom: 6 },
-  prepTitle:   { fontSize: 20, fontWeight: '800', color: '#fff', textAlign: 'center' },
-  prepSub:     { fontSize: 14, color: '#555' },
-  prepText:    { fontSize: 13, color: '#444', marginTop: 12, fontStyle: 'italic' },
 });
 
 export default WorkoutsScreen;
