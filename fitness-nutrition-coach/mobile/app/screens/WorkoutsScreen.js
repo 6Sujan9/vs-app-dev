@@ -2,9 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView,
-  Platform, Animated, Vibration,
+  Platform, Animated, Vibration, Image,
 } from 'react-native';
-import LottieView from 'lottie-react-native';
 import { workoutAPI } from '../utils/api';
 import { useTheme } from '../context/ThemeContext';
 
@@ -41,19 +40,28 @@ const DEFAULT_WORK_SECS = 45;
 const DEFAULT_REST_SECS = 60;
 const READY_SECS        = 3;
 
-const ANIMATIONS = {
-  workout:  require('../../assets/animations/workout.json'),
-  running:  require('../../assets/animations/running.json'),
-  rest:     require('../../assets/animations/rest.json'),
-  complete: require('../../assets/animations/complete.json'),
-};
+// ─── ExerciseDB API ───────────────────────────────────────────────────────────
+const EXERCISEDB_KEY  = 'f27299b5e7msh65f5be904713ab3p1c1205jsn2142e34d026b';
+const EXERCISEDB_HOST = 'exercisedb.p.rapidapi.com';
 
-const getExerciseAnimation = (exercise, phase) => {
-  if (phase === 'rest' || phase === 'ready') return ANIMATIONS.rest;
-  if (phase === 'complete') return ANIMATIONS.complete;
-  const name = (exercise?.name || '').toLowerCase();
-  if (/run|cardio|jog|treadmill|bike|cycl|jump|burpee|hiit|sprint/.test(name)) return ANIMATIONS.running;
-  return ANIMATIONS.workout;
+const fetchExerciseData = async (exerciseName) => {
+  try {
+    const encoded = encodeURIComponent((exerciseName || '').toLowerCase().trim());
+    const res = await fetch(
+      `https://${EXERCISEDB_HOST}/exercises/name/${encoded}?limit=1`,
+      {
+        headers: {
+          'x-rapidapi-key':  EXERCISEDB_KEY,
+          'x-rapidapi-host': EXERCISEDB_HOST,
+        },
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+  } catch {
+    return null;
+  }
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,11 +99,51 @@ const TimerProgress = ({ timeLeft, totalTime, phaseColor }) => {
   }, [progress]);
 
   return (
-    <View style={{ width: '80%', height: 6, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 3, marginTop: 16 }}>
+    <View style={{ width: '80%', height: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3, marginTop: 14 }}>
       <Animated.View style={{
-        height: 6, borderRadius: 3, backgroundColor: phaseColor,
+        height: 5, borderRadius: 3, backgroundColor: phaseColor,
         width: widthAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
       }} />
+    </View>
+  );
+};
+
+// ─── Exercise GIF Display ─────────────────────────────────────────────────────
+const ExerciseGif = ({ gifData, loading, size = 230, dimmed = false }) => {
+  const containerStyle = {
+    width: size, height: size,
+    borderRadius: 20,
+    backgroundColor: '#161616',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  };
+
+  if (loading) {
+    return (
+      <View style={containerStyle}>
+        <ActivityIndicator color="#43D787" size="large" />
+        <Text style={timerStyles.gifLoadingText}>Loading exercise...</Text>
+      </View>
+    );
+  }
+
+  if (gifData?.gifUrl) {
+    return (
+      <View style={containerStyle}>
+        <Image
+          source={{ uri: gifData.gifUrl }}
+          style={{ width: size, height: size, opacity: dimmed ? 0.45 : 1 }}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={containerStyle}>
+      <Text style={{ fontSize: 60, opacity: dimmed ? 0.4 : 1 }}>🏋️</Text>
+      <Text style={[timerStyles.gifLoadingText, { opacity: dimmed ? 0.4 : 1 }]}>No preview available</Text>
     </View>
   );
 };
@@ -118,6 +166,11 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
   const [totalElapsed, setTotalElapsed] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
 
+  // GIF state
+  const gifCacheRef    = useRef({});
+  const [currentGifData, setCurrentGifData] = useState(null);
+  const [gifLoading, setGifLoading]         = useState(false);
+
   // Pulse animation for the circle
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoop = useRef(null);
@@ -137,6 +190,16 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
     pulseAnim.setValue(1);
   };
 
+  // GIF loader with cache
+  const loadGif = useCallback(async (name) => {
+    if (!name) return null;
+    const key = name.toLowerCase().trim();
+    if (key in gifCacheRef.current) return gifCacheRef.current[key];
+    const data = await fetchExerciseData(name);
+    gifCacheRef.current[key] = data;
+    return data;
+  }, []);
+
   // Reset on open
   useEffect(() => {
     if (visible && exercises.length > 0) {
@@ -149,10 +212,36 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
       setPendingNextEx(false);
       setTotalElapsed(0);
       setCompletedCount(0);
+      setCurrentGifData(null);
+      gifCacheRef.current = {};
       startPulse();
     }
     return () => stopPulse();
   }, [visible]);
+
+  // Load GIF when exercise index changes
+  useEffect(() => {
+    if (!visible || !exercises[exIndex]) return;
+    let cancelled = false;
+
+    setGifLoading(true);
+    setCurrentGifData(null);
+
+    loadGif(exercises[exIndex]?.name).then((data) => {
+      if (!cancelled) {
+        setCurrentGifData(data);
+        setGifLoading(false);
+      }
+    });
+
+    // Pre-fetch next exercise GIF into cache
+    const nextIdx = exIndex + 1;
+    if (exercises[nextIdx]) {
+      loadGif(exercises[nextIdx]?.name);
+    }
+
+    return () => { cancelled = true; };
+  }, [exIndex, visible]);
 
   // Pulse when phase changes
   useEffect(() => {
@@ -160,7 +249,7 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
     startPulse();
   }, [phase]);
 
-  // Timer tick (setTimeout pattern — reads fresh state each tick)
+  // Timer tick
   useEffect(() => {
     if (!visible || phase === 'complete' || isPaused || timeLeft <= 0) return;
     const t = setTimeout(() => {
@@ -170,7 +259,7 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
     return () => clearTimeout(t);
   }, [visible, phase, isPaused, timeLeft]);
 
-  // Phase transition when timeLeft reaches 0
+  // Phase transitions
   useEffect(() => {
     if (timeLeft > 0 || !visible || phase === 'complete') return;
 
@@ -187,14 +276,12 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
     if (phase === 'work') {
       const totalSets = exercises[exIndex]?.sets || 1;
       if (currentSet < totalSets) {
-        // More sets: rest between sets
         const rt = getRestTime(exercises[exIndex]);
         setPhase('rest');
         setPendingNextEx(false);
         setTimeLeft(rt);
         setTotalTime(rt);
       } else {
-        // Last set of this exercise
         setCompletedCount(c => c + 1);
         const nextIdx = exIndex + 1;
         if (nextIdx >= exercises.length) {
@@ -275,10 +362,11 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
 
   if (!workout) return null;
 
-  const phaseColor = PHASE_COLORS[phase] || '#6C63FF';
-  const currentEx  = exercises[exIndex];
-  const nextEx     = phase === 'rest' && pendingNextEx ? exercises[exIndex + 1] : null;
-  const totalSets  = currentEx?.sets || 1;
+  const phaseColor  = PHASE_COLORS[phase] || '#6C63FF';
+  const currentEx   = exercises[exIndex];
+  const nextEx      = phase === 'rest' && pendingNextEx ? exercises[exIndex + 1] : null;
+  const totalSets   = currentEx?.sets || 1;
+  const nextGifData = nextEx ? (gifCacheRef.current[nextEx.name?.toLowerCase()?.trim()] ?? null) : null;
 
   const phaseLabel = {
     ready:    'GET READY',
@@ -290,7 +378,8 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
       <View style={[timerStyles.container, { backgroundColor: '#0A0A0A' }]}>
-        {/* Header */}
+
+        {/* ── Header ── */}
         <View style={timerStyles.header}>
           <Text style={timerStyles.workoutName} numberOfLines={1}>{workout.name}</Text>
           <TouchableOpacity onPress={handleStop} style={timerStyles.stopBtn}>
@@ -299,32 +388,124 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
         </View>
 
         {phase !== 'complete' ? (
-          <>
-            {/* Exercise info */}
-            <View style={timerStyles.exInfo}>
-              <Text style={[timerStyles.exCounter, { color: phaseColor }]}>
-                {phase === 'ready' ? 'Starting in...' : `Exercise ${exIndex + 1} of ${exercises.length}`}
-              </Text>
-              {currentEx && phase !== 'ready' && (
-                <Text style={timerStyles.exName} numberOfLines={2}>{currentEx.name}</Text>
-              )}
-              {phase === 'work' && (
-                <Text style={[timerStyles.setCounter, { color: phaseColor }]}>
-                  Set {currentSet} of {totalSets}
-                </Text>
-              )}
-            </View>
+          <ScrollView
+            style={{ flex: 1, width: '100%' }}
+            contentContainerStyle={timerStyles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Exercise counter ── */}
+            <Text style={[timerStyles.exCounter, { color: phaseColor }]}>
+              {phase === 'ready'
+                ? 'STARTING SOON'
+                : `EXERCISE ${exIndex + 1} / ${exercises.length}`}
+            </Text>
 
-            {/* Timer circle + Lottie */}
+            {/* ── WORK phase: exercise info + GIF ── */}
+            {phase === 'work' && (
+              <>
+                <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
+
+                {/* Muscle + equipment badges */}
+                <View style={timerStyles.badgeRow}>
+                  {currentGifData?.target ? (
+                    <View style={[timerStyles.muscleBadge, { backgroundColor: `${phaseColor}25` }]}>
+                      <Text style={[timerStyles.muscleBadgeText, { color: phaseColor }]}>
+                        💪 {currentGifData.target}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {currentGifData?.equipment ? (
+                    <View style={timerStyles.equipBadge}>
+                      <Text style={timerStyles.equipBadgeText}>
+                        🏋️ {currentGifData.equipment}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Sets × reps */}
+                <Text style={[timerStyles.setsReps, { color: phaseColor }]}>
+                  Set {currentSet} of {totalSets}
+                  {currentEx?.reps ? `  ·  ${currentEx.reps} reps` : ''}
+                </Text>
+
+                {/* GIF */}
+                <View style={timerStyles.gifWrap}>
+                  <ExerciseGif gifData={currentGifData} loading={gifLoading} size={230} />
+                </View>
+              </>
+            )}
+
+            {/* ── REST phase: dimmed GIF + overlay + next preview ── */}
+            {phase === 'rest' && (
+              <>
+                <Text style={timerStyles.exName} numberOfLines={2}>{currentEx?.name}</Text>
+
+                {/* Dimmed GIF with REST overlay */}
+                <View style={timerStyles.gifWrap}>
+                  <View style={{ position: 'relative' }}>
+                    <ExerciseGif gifData={currentGifData} loading={false} size={230} dimmed />
+                    <View style={timerStyles.restOverlay}>
+                      <Text style={[timerStyles.restOverlayText, { color: phaseColor }]}>REST</Text>
+                      <Text style={timerStyles.restOverlaySub}>Take a breath</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Next exercise preview card */}
+                <View style={timerStyles.nextExCard}>
+                  {nextEx ? (
+                    <>
+                      <Text style={timerStyles.nextExLabel}>NEXT UP</Text>
+                      <View style={timerStyles.nextExRow}>
+                        {nextGifData?.gifUrl ? (
+                          <Image
+                            source={{ uri: nextGifData.gifUrl }}
+                            style={timerStyles.nextExGif}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <View style={timerStyles.nextExGifPlaceholder}>
+                            <Text style={{ fontSize: 26 }}>🏋️</Text>
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={timerStyles.nextExName} numberOfLines={2}>{nextEx.name}</Text>
+                          {nextGifData?.target ? (
+                            <Text style={timerStyles.nextExMuscle}>💪 {nextGifData.target}</Text>
+                          ) : null}
+                          <Text style={timerStyles.nextExMeta}>
+                            {nextEx.sets} sets{nextEx.reps ? ` · ${nextEx.reps} reps` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={timerStyles.nextExLabel}>More sets coming up</Text>
+                  )}
+
+                  <TouchableOpacity
+                    onPress={skipRest}
+                    style={[timerStyles.skipRestBtn, { borderColor: phaseColor }]}
+                  >
+                    <Text style={[timerStyles.skipRestText, { color: phaseColor }]}>Skip Rest →</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* ── READY phase: countdown ── */}
+            {phase === 'ready' && (
+              <View style={timerStyles.readyWrap}>
+                <Text style={{ fontSize: 72 }}>🏁</Text>
+                <Text style={[timerStyles.readyHint, { color: phaseColor }]}>
+                  {exercises[0]?.name}
+                </Text>
+              </View>
+            )}
+
+            {/* ── Timer circle ── */}
             <View style={timerStyles.circleWrap}>
-              <LottieView
-                key={`lottie-${phase}-${exIndex}`}
-                source={getExerciseAnimation(currentEx, phase)}
-                autoPlay
-                loop
-                resizeMode="contain"
-                style={timerStyles.lottieAnim}
-              />
               <Animated.View style={[
                 timerStyles.circle,
                 {
@@ -334,30 +515,14 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
                 },
               ]}>
                 <Text style={[timerStyles.phaseLabel, { color: phaseColor }]}>{phaseLabel}</Text>
-                <Text style={timerStyles.timerNum} numberOfLines={1} adjustsFontSizeToFit>{fmtTime(timeLeft)}</Text>
+                <Text style={timerStyles.timerNum} numberOfLines={1} adjustsFontSizeToFit>
+                  {fmtTime(timeLeft)}
+                </Text>
               </Animated.View>
               <TimerProgress timeLeft={timeLeft} totalTime={totalTime} phaseColor={phaseColor} />
             </View>
 
-            {/* REST info */}
-            {phase === 'rest' && (
-              <View style={timerStyles.restInfo}>
-                {nextEx ? (
-                  <>
-                    <Text style={timerStyles.upNextLabel}>NEXT UP</Text>
-                    <Text style={timerStyles.upNextName}>{nextEx.name}</Text>
-                    {nextEx.sets && <Text style={timerStyles.upNextMeta}>{nextEx.sets} sets · {nextEx.reps || ''} reps</Text>}
-                  </>
-                ) : (
-                  <Text style={timerStyles.upNextLabel}>More sets coming up</Text>
-                )}
-                <TouchableOpacity onPress={skipRest} style={[timerStyles.skipRestBtn, { borderColor: phaseColor }]}>
-                  <Text style={[timerStyles.skipRestText, { color: phaseColor }]}>Skip Rest →</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Controls */}
+            {/* ── Controls ── */}
             <View style={timerStyles.controls}>
               <TouchableOpacity
                 style={[timerStyles.ctrlBtn, { opacity: exIndex === 0 ? 0.3 : 1 }]}
@@ -381,33 +546,32 @@ const WorkoutTimerModal = ({ visible, workout, onClose }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Bottom progress dots */}
+            {/* ── Progress dots ── */}
             <View style={timerStyles.dots}>
               {exercises.map((_, i) => (
-                <View key={i} style={[
-                  timerStyles.dot,
-                  {
-                    backgroundColor: i < completedCount ? '#43D787'
-                      : i === exIndex ? phaseColor
-                      : 'rgba(255,255,255,0.15)',
-                    width: i === exIndex ? 16 : 8,
-                  },
-                ]} />
+                <View
+                  key={i}
+                  style={[
+                    timerStyles.dot,
+                    {
+                      backgroundColor:
+                        i < completedCount ? '#43D787'
+                        : i === exIndex   ? phaseColor
+                        : 'rgba(255,255,255,0.12)',
+                      width: i === exIndex ? 18 : 8,
+                    },
+                  ]}
+                />
               ))}
             </View>
 
-            {/* Elapsed */}
             <Text style={timerStyles.elapsed}>Total time: {fmtElapsed(totalElapsed)}</Text>
-          </>
+          </ScrollView>
+
         ) : (
           /* ── Complete screen ── */
           <View style={timerStyles.completeWrap}>
-            <LottieView
-              source={ANIMATIONS.complete}
-              autoPlay
-              loop={false}
-              style={timerStyles.lottieComplete}
-            />
+            <Text style={{ fontSize: 88, marginBottom: 8 }}>🏆</Text>
             <Text style={timerStyles.completeTitle}>Workout Complete!</Text>
             <Text style={timerStyles.completeSub}>Amazing work, keep it up!</Text>
 
@@ -438,52 +602,71 @@ const SummaryRow = ({ icon, label, value }) => (
 );
 
 const timerStyles = StyleSheet.create({
-  container:     { flex: 1, alignItems: 'center', paddingTop: 56 },
-  header:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 20, marginBottom: 8 },
-  workoutName:   { fontSize: 15, fontWeight: '700', color: '#fff', flex: 1, marginRight: 12 },
-  stopBtn:       { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
-  stopBtnText:   { color: '#FF6584', fontWeight: '700', fontSize: 13 },
+  container:       { flex: 1, alignItems: 'center', paddingTop: 56 },
+  header:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 20, marginBottom: 10 },
+  workoutName:     { fontSize: 15, fontWeight: '700', color: '#fff', flex: 1, marginRight: 12 },
+  stopBtn:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)' },
+  stopBtnText:     { color: '#FF6584', fontWeight: '700', fontSize: 13 },
 
-  exInfo:        { alignItems: 'center', paddingHorizontal: 24, marginBottom: 10 },
-  exCounter:     { fontSize: 13, fontWeight: '700', letterSpacing: 2, marginBottom: 8 },
-  exName:        { fontSize: 26, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 32 },
-  setCounter:    { fontSize: 14, fontWeight: '600', marginTop: 8 },
+  scrollContent:   { alignItems: 'center', paddingHorizontal: 16, paddingBottom: 24 },
 
-  circleWrap:    { alignItems: 'center', marginBottom: 12 },
-  lottieAnim:    { width: 150, height: 150, marginBottom: 2, backgroundColor: 'transparent' },
-  circle:        { width: 210, height: 210, borderRadius: 105, borderWidth: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  phaseLabel:    { fontSize: 12, fontWeight: '800', letterSpacing: 3, marginBottom: 4 },
-  timerNum:      { fontSize: 64, fontWeight: '800', color: '#fff', letterSpacing: -2, width: '100%', textAlign: 'center' },
+  exCounter:       { fontSize: 11, fontWeight: '800', letterSpacing: 2.5, marginBottom: 6 },
+  exName:          { fontSize: 22, fontWeight: '800', color: '#fff', textAlign: 'center', lineHeight: 28, paddingHorizontal: 12, marginBottom: 8 },
 
-  restInfo:      { alignItems: 'center', marginBottom: 28, paddingHorizontal: 32 },
-  upNextLabel:   { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 2, marginBottom: 6 },
-  upNextName:    { fontSize: 20, fontWeight: '700', color: '#fff', textAlign: 'center', marginBottom: 4 },
-  upNextMeta:    { fontSize: 13, color: '#aaa', marginBottom: 14 },
-  skipRestBtn:   { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20, borderWidth: 1.5 },
-  skipRestText:  { fontWeight: '700', fontSize: 14 },
+  badgeRow:        { flexDirection: 'row', gap: 8, marginBottom: 6, flexWrap: 'wrap', justifyContent: 'center' },
+  muscleBadge:     { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  muscleBadgeText: { fontWeight: '700', fontSize: 12, textTransform: 'capitalize' },
+  equipBadge:      { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)' },
+  equipBadgeText:  { color: '#aaa', fontSize: 12, textTransform: 'capitalize' },
+  setsReps:        { fontSize: 14, fontWeight: '700', marginBottom: 10 },
 
-  controls:      { flexDirection: 'row', alignItems: 'center', gap: 32, marginBottom: 28 },
-  ctrlBtn:       { alignItems: 'center', gap: 4 },
-  ctrlIcon:      { fontSize: 28, color: '#fff' },
-  ctrlLabel:     { fontSize: 11, color: '#666', fontWeight: '600' },
-  playPauseBtn:  { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
-  playPauseIcon: { fontSize: 28, color: '#fff' },
+  gifWrap:         { alignItems: 'center', marginBottom: 14 },
+  gifLoadingText:  { color: '#555', fontSize: 12, marginTop: 10 },
 
-  dots:          { flexDirection: 'row', gap: 6, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: 32 },
-  dot:           { height: 8, borderRadius: 4 },
-  elapsed:       { fontSize: 12, color: '#555', fontWeight: '500' },
+  restOverlay:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
+  restOverlayText: { fontSize: 52, fontWeight: '900', letterSpacing: 6, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 8 },
+  restOverlaySub:  { fontSize: 14, color: 'rgba(255,255,255,0.65)', fontWeight: '600', marginTop: 4 },
 
-  completeWrap:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  lottieComplete:{ width: 200, height: 200, marginBottom: 8 },
-  completeTitle: { fontSize: 32, fontWeight: '800', color: '#fff', marginBottom: 8 },
-  completeSub:   { fontSize: 16, color: '#aaa', marginBottom: 32 },
-  summaryCard:   { width: '100%', backgroundColor: '#1A1A1A', borderRadius: 18, padding: 20, marginBottom: 32, gap: 16 },
-  summaryRow:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  summaryIcon:   { fontSize: 24 },
-  summaryLabel:  { flex: 1, fontSize: 15, color: '#aaa' },
-  summaryValue:  { fontSize: 18, fontWeight: '700', color: '#fff' },
-  doneBtn:       { paddingHorizontal: 48, paddingVertical: 16, borderRadius: 30 },
-  doneBtnText:   { color: '#fff', fontWeight: '800', fontSize: 17 },
+  nextExCard:      { width: '92%', backgroundColor: '#161616', borderRadius: 18, padding: 16, marginBottom: 10 },
+  nextExLabel:     { fontSize: 10, fontWeight: '800', color: '#666', letterSpacing: 2.5, marginBottom: 12 },
+  nextExRow:       { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'center' },
+  nextExGif:       { width: 76, height: 76, borderRadius: 12, backgroundColor: '#222' },
+  nextExGifPlaceholder: { width: 76, height: 76, borderRadius: 12, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' },
+  nextExName:      { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 4 },
+  nextExMuscle:    { fontSize: 12, color: '#5AC8FA', marginBottom: 4, textTransform: 'capitalize' },
+  nextExMeta:      { fontSize: 12, color: '#666' },
+  skipRestBtn:     { paddingHorizontal: 24, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, alignSelf: 'center' },
+  skipRestText:    { fontWeight: '700', fontSize: 14 },
+
+  readyWrap:       { alignItems: 'center', marginBottom: 16, gap: 10 },
+  readyHint:       { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+
+  circleWrap:      { alignItems: 'center', marginBottom: 16 },
+  circle:          { width: 160, height: 160, borderRadius: 80, borderWidth: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  phaseLabel:      { fontSize: 11, fontWeight: '800', letterSpacing: 3, marginBottom: 4 },
+  timerNum:        { fontSize: 52, fontWeight: '800', color: '#fff', letterSpacing: -2, width: '100%', textAlign: 'center' },
+
+  controls:        { flexDirection: 'row', alignItems: 'center', gap: 32, marginBottom: 14 },
+  ctrlBtn:         { alignItems: 'center', gap: 4 },
+  ctrlIcon:        { fontSize: 28, color: '#fff' },
+  ctrlLabel:       { fontSize: 11, color: '#555', fontWeight: '600' },
+  playPauseBtn:    { width: 68, height: 68, borderRadius: 34, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 10, elevation: 8 },
+  playPauseIcon:   { fontSize: 26, color: '#fff' },
+
+  dots:            { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: 32 },
+  dot:             { height: 8, borderRadius: 4 },
+  elapsed:         { fontSize: 12, color: '#444', fontWeight: '500' },
+
+  completeWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  completeTitle:   { fontSize: 34, fontWeight: '800', color: '#fff', marginBottom: 8 },
+  completeSub:     { fontSize: 16, color: '#666', marginBottom: 32 },
+  summaryCard:     { width: '100%', backgroundColor: '#161616', borderRadius: 18, padding: 20, marginBottom: 32, gap: 16 },
+  summaryRow:      { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  summaryIcon:     { fontSize: 24 },
+  summaryLabel:    { flex: 1, fontSize: 15, color: '#aaa' },
+  summaryValue:    { fontSize: 18, fontWeight: '700', color: '#fff' },
+  doneBtn:         { paddingHorizontal: 48, paddingVertical: 16, borderRadius: 30 },
+  doneBtnText:     { color: '#fff', fontWeight: '800', fontSize: 17 },
 });
 
 // ─── WorkoutsScreen ───────────────────────────────────────────────────────────
