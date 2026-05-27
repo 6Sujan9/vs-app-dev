@@ -50,19 +50,58 @@ const getPlaceholderEmoji = (name = '') => {
   return '🏋️';
 };
 
+const EQUIPMENT_PREFIXES = /^(barbell|dumbbell|dumbell|cable|resistance band|kettlebell|ez.?bar|smith machine|machine|weighted|assisted|bodyweight|body weight)\s+/i;
+
+const SKIP_WORDS = new Set(['with', 'and', 'on', 'in', 'at', 'a', 'the', 'using', 'or']);
+
+const buildSearchTerms = (name) => {
+  const terms = [];
+  const clean = name.trim();
+
+  // 1. Full name as-is
+  terms.push(clean);
+
+  // 2. Strip leading equipment prefix
+  const stripped = clean.replace(EQUIPMENT_PREFIXES, '').trim();
+  if (stripped !== clean) terms.push(stripped);
+
+  // 3. Strip a second prefix layer (e.g. "cable seated row" → "seated row" → "row")
+  const stripped2 = stripped.replace(EQUIPMENT_PREFIXES, '').trim();
+  if (stripped2 !== stripped) terms.push(stripped2);
+
+  // 4. First two meaningful words of the stripped name (e.g. "bicep curl")
+  const words = stripped.split(/\s+/).filter(w => !SKIP_WORDS.has(w.toLowerCase()));
+  if (words.length >= 2) terms.push(`${words[0]} ${words[1]}`);
+
+  // 5. First meaningful word only (e.g. "curl", "press", "squat")
+  if (words.length >= 1) terms.push(words[0]);
+
+  // Deduplicate while preserving order
+  return [...new Set(terms)];
+};
+
+const searchWger = async (term) => {
+  const res = await fetch(
+    `https://wger.de/api/v2/exercise/search/?term=${encodeURIComponent(term)}&language=english&format=json`
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data.suggestions || data.suggestions.length === 0) return null;
+  return data.suggestions[0].data.id;
+};
+
 const fetchExerciseData = async (exerciseName) => {
   try {
-    const searchRes = await fetch(
-      `https://wger.de/api/v2/exercise/search/?term=${encodeURIComponent(exerciseName)}&language=english&format=json`
-    );
-    const searchData = await searchRes.json();
+    const terms = buildSearchTerms(exerciseName);
 
-    if (searchData.suggestions && searchData.suggestions.length > 0) {
-      const exerciseId = searchData.suggestions[0].data.id;
+    for (const term of terms) {
+      const exerciseId = await searchWger(term);
+      if (!exerciseId) continue;
 
       const imgRes = await fetch(
         `https://wger.de/api/v2/exerciseimage/?exercise=${exerciseId}&format=json`
       );
+      if (!imgRes.ok) continue;
       const imgData = await imgRes.json();
 
       if (imgData.results && imgData.results.length > 0) {
