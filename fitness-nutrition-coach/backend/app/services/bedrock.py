@@ -268,7 +268,7 @@ class BedrockService:
             f"- Equipment: {', '.join(equipment) or 'bodyweight only'}\n"
             f"- Intensity: {intensity}\n"
             f"- Special Requirements: {specific_requirements or 'None'}\n\n"
-            "Generate a workout plan with 6-8 exercises. "
+            f"Generate a workout plan with EXACTLY {max(4, min(8, 10 - frequency))} exercises. "
             "Return ONLY this JSON structure (start with { and end with }):\n"
             '{"name": "Plan Name", "description": "One sentence description", '
             '"exercises": [{"name": "Exercise Name", "sets": 3, "reps": 12, "rest_seconds": 60, "notes": "Form tip"}]}'
