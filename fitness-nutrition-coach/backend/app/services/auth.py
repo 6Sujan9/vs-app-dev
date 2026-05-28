@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.models import User
-from app.schemas import RegisterRequest, LoginRequest, TokenResponse
+from app.schemas import RegisterRequest, LoginRequest, TokenResponse, ChangePasswordRequest
 from app.core.security import SecurityService, pwd_context
 from datetime import timedelta
 from typing import Optional, Tuple
@@ -146,6 +146,19 @@ class AuthService:
         )
         
         return access_token
+
+    @staticmethod
+    def change_password(db: Session, user: User, request: ChangePasswordRequest) -> Optional[str]:
+        """
+        Change user password.
+
+        Returns None on success, or an error string on failure.
+        """
+        if not SecurityService.verify_password(request.current_password, user.hashed_password):
+            return "Current password is incorrect"
+        user.hashed_password = SecurityService.hash_password(request.new_password)
+        db.commit()
+        return None
 
     @staticmethod
     def get_current_user(db: Session, token: str) -> Optional[User]:

@@ -36,6 +36,12 @@ class TokenRefreshRequest(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordRequest(BaseModel):
+    """Change password request."""
+    current_password: str
+    new_password: str = Field(..., min_length=6, max_length=100)
+
+
 # ============ User Schemas ============
 
 class UserProfile(BaseModel):

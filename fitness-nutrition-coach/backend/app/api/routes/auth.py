@@ -1,9 +1,9 @@
 """Authentication routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import RegisterRequest, LoginRequest, TokenResponse, TokenRefreshRequest
+from app.schemas import RegisterRequest, LoginRequest, TokenResponse, TokenRefreshRequest, ChangePasswordRequest
 from app.services.auth import AuthService
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -83,6 +83,28 @@ async def refresh_token(request: TokenRefreshRequest):
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Change the authenticated user's password."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
+
+    token = authorization.split(" ", 1)[1]
+    user = AuthService.get_current_user(db, token)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+    error = AuthService.change_password(db, user, request)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+
+    return {"message": "Password changed successfully"}
 
 
 @router.get("/verify")

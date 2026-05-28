@@ -68,6 +68,7 @@ const makeRequest = async (endpoint, options = {}) => {
 export const authAPI = {
   register: (userData) => makeRequest('/auth/register', { method: 'POST', body: userData }),
   login: (credentials) => makeRequest('/auth/login', { method: 'POST', body: credentials }),
+  changePassword: (data) => makeRequest('/auth/change-password', { method: 'POST', body: data }),
 };
 
 export const userAPI = {

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\Ganesh Bhattarai\\\\OneDrive\\\\Desktop\\\\New folder\\\\vs-app-dev\\\\fitness-nutrition-coach\\\\mobile\\\\app\\\\assets\")",
+      "Bash(cd \"/c/Users/Ganesh Bhattarai/OneDrive/Desktop/New folder/vs-app-dev/fitness-nutrition-coach/mobile/app\" && find . -type f -name \"*.js\" -o -name \"*.jsx\" -o -name \"*.json\" | head -50)",
+      "Read(//c/c/Users/Ganesh Bhattarai/OneDrive/Desktop/New folder/vs-app-dev/fitness-nutrition-coach/mobile/**)"
+    ]
+  }
+}

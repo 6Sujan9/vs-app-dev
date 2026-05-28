@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { userAPI } from '../utils/api';
+import { userAPI, authAPI } from '../utils/api';
 import Constants from 'expo-constants';
 
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -33,6 +33,16 @@ const ProfileScreen = () => {
     dietary_restrictions: [],
     medical_conditions: '',
   });
+
+  // Change Password state
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [cpForm, setCpForm] = useState({ current: '', next: '', confirm: '' });
+  const [cpErrors, setCpErrors] = useState({});
+  const [cpSaving, setCpSaving] = useState(false);
+  const [cpGeneralError, setCpGeneralError] = useState('');
+  const [showCurrentPwd, setShowCurrentPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
+  const [showConfirmPwd, setShowConfirmPwd] = useState(false);
 
   // Stat counter animations
   const ageAnim = useRef(new Animated.Value(0)).current;
@@ -125,6 +135,39 @@ const ProfileScreen = () => {
       Alert.alert('Error', err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const closeCpModal = () => {
+    setShowChangePwd(false);
+    setCpForm({ current: '', next: '', confirm: '' });
+    setCpErrors({});
+    setCpGeneralError('');
+    setShowCurrentPwd(false);
+    setShowNewPwd(false);
+    setShowConfirmPwd(false);
+  };
+
+  const handleChangePassword = async () => {
+    const errs = {};
+    if (!cpForm.current) errs.current = 'Current password is required';
+    if (!cpForm.next) errs.next = 'New password is required';
+    else if (cpForm.next.length < 6) errs.next = 'Password must be at least 6 characters';
+    if (!cpForm.confirm) errs.confirm = 'Please confirm your new password';
+    else if (cpForm.next && cpForm.next !== cpForm.confirm) errs.confirm = 'Passwords do not match';
+    setCpErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    setCpSaving(true);
+    setCpGeneralError('');
+    try {
+      await authAPI.changePassword({ current_password: cpForm.current, new_password: cpForm.next });
+      closeCpModal();
+      Alert.alert('Success', 'Password changed successfully!');
+    } catch (err) {
+      setCpGeneralError(err.message || 'Failed to change password. Please try again.');
+    } finally {
+      setCpSaving(false);
     }
   };
 
@@ -261,6 +304,16 @@ const ProfileScreen = () => {
                 thumbColor={theme.isDark ? '#fff' : '#f4f3f4'}
               />
             </View>
+            <TouchableOpacity
+              style={[styles.detailRow, { borderBottomColor: C.divider }]}
+              onPress={() => setShowChangePwd(true)}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ fontSize: 18 }}>🔒</Text>
+                <Text style={[styles.detailLabel, { color: C.text }]}>Change Password</Text>
+              </View>
+              <Text style={{ color: C.textMuted, fontSize: 18 }}>›</Text>
+            </TouchableOpacity>
             <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
               <Text style={[styles.detailLabel, { color: C.textSub }]}>Version</Text>
               <Text style={[styles.detailValue, { color: C.textMuted }]}>
@@ -282,6 +335,94 @@ const ProfileScreen = () => {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Change Password Modal */}
+      <Modal visible={showChangePwd} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeCpModal}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView
+            style={[styles.modal, { backgroundColor: C.surface }]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Change Password</Text>
+              <TouchableOpacity onPress={closeCpModal}>
+                <Text style={[styles.closeBtn, { color: C.textSub }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {cpGeneralError ? (
+              <View style={[styles.generalErrorBox, { backgroundColor: `${C.danger}18`, borderColor: `${C.danger}40` }]}>
+                <Text style={[styles.generalErrorText, { color: C.danger }]}>{cpGeneralError}</Text>
+              </View>
+            ) : null}
+
+            <Text style={[styles.label, { color: C.text }]}>Current Password</Text>
+            <View style={[styles.pwdInputWrap, { backgroundColor: C.inputBg, borderColor: cpErrors.current ? C.danger : C.inputBorder }]}>
+              <TextInput
+                style={[styles.pwdInput, { color: C.text }]}
+                value={cpForm.current}
+                secureTextEntry={!showCurrentPwd}
+                placeholder="Enter current password"
+                placeholderTextColor={C.textMuted}
+                onChangeText={(v) => { setCpForm((p) => ({ ...p, current: v })); setCpErrors((e) => ({ ...e, current: '' })); }}
+              />
+              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowCurrentPwd((v) => !v)}>
+                <Text style={{ fontSize: 18, color: C.textMuted }}>{showCurrentPwd ? '🙈' : '👁️'}</Text>
+              </TouchableOpacity>
+            </View>
+            {cpErrors.current ? <Text style={[styles.errorText, { color: C.danger }]}>{cpErrors.current}</Text> : null}
+
+            <Text style={[styles.label, { color: C.text }]}>New Password</Text>
+            <View style={[styles.pwdInputWrap, { backgroundColor: C.inputBg, borderColor: cpErrors.next ? C.danger : C.inputBorder }]}>
+              <TextInput
+                style={[styles.pwdInput, { color: C.text }]}
+                value={cpForm.next}
+                secureTextEntry={!showNewPwd}
+                placeholder="Enter new password (min. 6 chars)"
+                placeholderTextColor={C.textMuted}
+                onChangeText={(v) => { setCpForm((p) => ({ ...p, next: v })); setCpErrors((e) => ({ ...e, next: '' })); }}
+              />
+              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowNewPwd((v) => !v)}>
+                <Text style={{ fontSize: 18, color: C.textMuted }}>{showNewPwd ? '🙈' : '👁️'}</Text>
+              </TouchableOpacity>
+            </View>
+            {cpErrors.next ? <Text style={[styles.errorText, { color: C.danger }]}>{cpErrors.next}</Text> : null}
+
+            <Text style={[styles.label, { color: C.text }]}>Confirm New Password</Text>
+            <View style={[styles.pwdInputWrap, { backgroundColor: C.inputBg, borderColor: cpErrors.confirm ? C.danger : C.inputBorder }]}>
+              <TextInput
+                style={[styles.pwdInput, { color: C.text }]}
+                value={cpForm.confirm}
+                secureTextEntry={!showConfirmPwd}
+                placeholder="Confirm new password"
+                placeholderTextColor={C.textMuted}
+                onChangeText={(v) => { setCpForm((p) => ({ ...p, confirm: v })); setCpErrors((e) => ({ ...e, confirm: '' })); }}
+              />
+              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowConfirmPwd((v) => !v)}>
+                <Text style={{ fontSize: 18, color: C.textMuted }}>{showConfirmPwd ? '🙈' : '👁️'}</Text>
+              </TouchableOpacity>
+            </View>
+            {cpErrors.confirm ? <Text style={[styles.errorText, { color: C.danger }]}>{cpErrors.confirm}</Text> : null}
+
+            <View style={styles.pwdBtnRow}>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: C.border }]} onPress={closeCpModal}>
+                <Text style={[styles.cancelBtnText, { color: C.textSub }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, { flex: 1, backgroundColor: C.primary, marginTop: 0 }, cpSaving && { opacity: 0.7 }]}
+                onPress={handleChangePassword}
+                disabled={cpSaving}
+              >
+                {cpSaving
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.saveBtnText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal visible={showEdit} animationType="slide" presentationStyle="pageSheet">
@@ -577,6 +718,28 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#fff', fontWeight: '600' },
   saveBtn: { borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginTop: 24 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  pwdInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  pwdInput: { flex: 1, padding: 12, fontSize: 15 },
+  eyeBtn: { paddingHorizontal: 12, paddingVertical: 12 },
+  errorText: { fontSize: 12, marginBottom: 4, marginLeft: 2 },
+  generalErrorBox: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 8 },
+  generalErrorText: { fontSize: 13 },
+  pwdBtnRow: { flexDirection: 'row', gap: 12, marginTop: 28 },
+  cancelBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: { fontWeight: '600', fontSize: 15 },
 });
 
 export default ProfileScreen;
